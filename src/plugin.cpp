@@ -1,4 +1,5 @@
-
+#include "Hooks.h"
+#include "MCP.h"
 
 void OnMessage(SKSE::MessagingInterface::Message* message) {
     if (message->type == SKSE::MessagingInterface::kDataLoaded) {
@@ -32,6 +33,8 @@ SKSEPluginLoad(const SKSE::LoadInterface *skse) {
 
     SetupLog();
     logger::info("Plugin loaded");
+    Hooks::Install();
+	MCP::Register();
     SKSE::Init(skse);
     return true;
 }
