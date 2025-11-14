@@ -154,22 +154,29 @@ namespace MessagingProfiler {
     struct ModuleRow { std::string module; std::array<double, SKSE::MessagingInterface::kTotal> avgMs{}; };
 
     std::vector<ModuleRow> GetModuleRowsSnapshot() {
-        std::unordered_map<std::string, ModuleRow> map;
+        struct Accum { std::array<uint64_t, SKSE::MessagingInterface::kTotal> sumNs{}; std::array<uint64_t, SKSE::MessagingInterface::kTotal> sumCnt{}; };
+        std::unordered_map<std::string, Accum> acc;
+        // accumulate totals per module per message type
         for (std::size_t i = 0; i < g_nextIndex.load(std::memory_order_relaxed); ++i) {
-            auto& e = g_entries[i]; auto& row = map[e.pluginName]; row.module = e.pluginName;
+            auto& e = g_entries[i]; auto& a = acc[e.pluginName];
             for (std::uint32_t t = 0; t < SKSE::MessagingInterface::kTotal; ++t) {
-                auto& ms = e.perMessage[t]; const uint64_t cnt = ms.count.load(std::memory_order_relaxed); const uint64_t tot = ms.totalNs.load(std::memory_order_relaxed);
-                if (cnt) row.avgMs[t] += (static_cast<double>(tot) / cnt) / 1'000'000.0;
+                auto& ms = e.perMessage[t];
+                uint64_t cnt = ms.count.load(std::memory_order_relaxed);
+                if (!cnt) continue;
+                a.sumCnt[t] += cnt;
+                a.sumNs[t]  += ms.totalNs.load(std::memory_order_relaxed);
             }
         }
-        for (auto& row : map | std::views::values) {
-            std::array<int, SKSE::MessagingInterface::kTotal> contrib{};
-            for (std::size_t i = 0; i < g_nextIndex.load(std::memory_order_relaxed); ++i) {
-                auto& e = g_entries[i]; if (e.pluginName != row.module) continue; for (std::uint32_t t = 0; t < SKSE::MessagingInterface::kTotal; ++t) if (e.perMessage[t].count.load(std::memory_order_relaxed)) contrib[t]++;
+        std::vector<ModuleRow> out; out.reserve(acc.size());
+        for (auto& [module, a] : acc) {
+            ModuleRow row; row.module = module;
+            for (std::uint32_t t = 0; t < SKSE::MessagingInterface::kTotal; ++t) {
+                row.avgMs[t] = a.sumCnt[t] ? (static_cast<double>(a.sumNs[t]) / a.sumCnt[t]) / 1'000'000.0 : 0.0;
             }
-            for (std::uint32_t t = 0; t < SKSE::MessagingInterface::kTotal; ++t) if (contrib[t] > 1) row.avgMs[t] /= contrib[t];
+            out.emplace_back(std::move(row));
         }
-        std::vector<ModuleRow> out; out.reserve(map.size()); for (auto& kv : map) out.push_back(std::move(kv.second)); std::sort(out.begin(), out.end(), [](const ModuleRow& a, const ModuleRow& b){ return a.module < b.module; }); return out;
+        std::sort(out.begin(), out.end(), [](const ModuleRow& A, const ModuleRow& B){ return A.module < B.module; });
+        return out;
     }
 
     std::vector<std::string_view> GetMessageTypeNames() { std::vector<std::string_view> names; names.reserve(SKSE::MessagingInterface::kTotal); for (std::uint32_t t = 0; t < SKSE::MessagingInterface::kTotal; ++t) names.emplace_back(MessageTypeName(t)); return names; }

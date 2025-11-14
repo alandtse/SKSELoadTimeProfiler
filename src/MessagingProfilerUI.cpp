@@ -25,7 +25,6 @@ namespace MessagingProfilerUI {
         auto names = MessagingProfilerBackend::GetMessageTypeNames();
         EnsureSelectionSize(s, names.size());
         auto rows = MessagingProfilerBackend::GetAverageDurations();
-        auto totals = MessagingProfilerBackend::GetTotalsAvgMs();
 
         if (ImGui::CollapsingHeader("Message Types")) {
             ImGui::Indent();
@@ -75,13 +74,20 @@ namespace MessagingProfilerUI {
                 return s.sortAsc ? av < bv : av > bv;
             });
 
-            // Totals row
+            // Compute displayed column totals from enriched rows
+            std::vector<double> colTotals(active.size(), 0.0);
+            for (auto& e : enriched) {
+                for (std::size_t c=0; c<active.size(); ++c) {
+                    double v = (*e.vals)[active[c]]; if (v < 1.0) v = 0.0; colTotals[c] += v;
+                }
+            }
+            double totalsSum = 0.0; for (double v : colTotals) totalsSum += v;
+
+            // Totals row based on displayed values
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("<Totals>");
-            ImGui::TableSetColumnIndex(1); {
-                double sum=0.0; for(auto idx:active){ double v=totals[idx]; if(v<1.0) v=0.0; sum+=v;} ColorCell(sum,warnMs,critMs); ImGui::Text("%.1f", sum);
-            }
-            for (std::size_t c=0;c<active.size();++c){ ImGui::TableSetColumnIndex(static_cast<int>(c+2)); double v=totals[active[c]]; if(v<1.0) v=0.0; ColorCell(v,warnMs,critMs); ImGui::Text("%.1f", v);}            
+            ImGui::TableSetColumnIndex(1); { ColorCell(totalsSum,warnMs,critMs); ImGui::Text("%.1f", totalsSum); }
+            for (std::size_t c=0;c<active.size();++c){ ImGui::TableSetColumnIndex(static_cast<int>(c+2)); double v=colTotals[c]; ColorCell(v,warnMs,critMs); ImGui::Text("%.1f", v);}            
 
             // Module rows
             for (auto& e : enriched) {

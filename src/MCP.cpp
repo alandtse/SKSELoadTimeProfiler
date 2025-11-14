@@ -18,9 +18,13 @@ void MCP::Register() {
 }
 
 void __stdcall MCP::RenderLog() {
-    ImGui::Checkbox("Trace", &LogSettings::log_trace); ImGui::SameLine();
-    ImGui::Checkbox("Info", &LogSettings::log_info); ImGui::SameLine();
-    ImGui::Checkbox("Warning", &LogSettings::log_warning); ImGui::SameLine();
+    bool dirty = false;
+    if (ImGui::Checkbox("Trace", &LogSettings::log_trace)) dirty = true; ImGui::SameLine();
+    if (ImGui::Checkbox("Info", &LogSettings::log_info)) dirty = true; ImGui::SameLine();
+    if (ImGui::Checkbox("Warning", &LogSettings::log_warning)) dirty = true; ImGui::SameLine();
+    if (ImGui::Checkbox("Error", &LogSettings::log_error)) dirty = true;
+    ImGui::SameLine();
+    if (ImGui::Button("Save Settings") || dirty) { LogSettings::Save(); dirty = false; }
     if (ImGui::Button("Generate Log")) { logLines = Utilities::ReadLogFile(); }
     for (const auto &line : logLines) {
         if (line.find("trace")!=std::string::npos && !LogSettings::log_trace) continue;

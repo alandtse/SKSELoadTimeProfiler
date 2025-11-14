@@ -1,11 +1,4 @@
 #pragma once
-#include "SKSE/SKSE.h"
-#include <array>
-#include <atomic>
-#include <mutex>
-#include <string>
-#include <string_view>
-#include <vector>
 
 namespace MessagingProfiler {
     using RawRegisterFn = bool(*)(SKSE::PluginHandle, const char*, void*);
