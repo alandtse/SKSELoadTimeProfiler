@@ -14,34 +14,32 @@ namespace LogSettings {
 
     inline std::filesystem::path GetConfigPath() {
         const auto plugin = SKSE::PluginDeclaration::GetSingleton()->GetName();
-        std::filesystem::path dllPath{REL::Module::get().filename()};
-        auto dir = dllPath.parent_path() / std::filesystem::path(plugin);
-        std::error_code ec;
-        std::filesystem::create_directories(dir, ec);
+        const std::filesystem::path dllPath{ REL::Module::get().filename() };
+        const auto dir = dllPath.parent_path() / std::filesystem::path(plugin);
+        std::error_code ec; std::filesystem::create_directories(dir, ec);
         return dir / std::format("{}.json", plugin);
     }
 
     inline void Load() {
         auto path = GetConfigPath();
         std::ifstream ifs(path);
-        if (!ifs.is_open()) return;
+        if (!ifs.is_open()) return; // no file -> defaults (UI will initialize all true)
         rapidjson::IStreamWrapper isw(ifs);
-        rapidjson::Document doc;
-        doc.ParseStream(isw);
+        rapidjson::Document doc; doc.ParseStream(isw);
         if (doc.HasParseError() || !doc.IsObject()) return;
-        if (doc.HasMember("profiler_warn_ms") && doc["profiler_warn_ms"].IsNumber())
-            MCP::profilerWarnMs = doc["profiler_warn_ms"].GetDouble();
-        if (doc.HasMember("profiler_crit_ms") && doc["profiler_crit_ms"].IsNumber())
-            MCP::profilerCritMs = doc["profiler_crit_ms"].GetDouble();
+        if (doc.HasMember("profiler_warn_ms") && doc["profiler_warn_ms"].IsNumber()) MCP::profilerWarnMs = doc["profiler_warn_ms"].GetDouble();
+        if (doc.HasMember("profiler_crit_ms") && doc["profiler_crit_ms"].IsNumber()) MCP::profilerCritMs = doc["profiler_crit_ms"].GetDouble();
         if (doc.HasMember("profiler_visible") && doc["profiler_visible"].IsArray()) {
             auto arr = doc["profiler_visible"].GetArray();
             auto names = MessagingProfilerBackend::GetMessageTypeNames();
             std::vector<bool> vis(names.size(), false);
-            for (auto& v : arr)
-                if (v.IsString()) {
-                    std::string s = v.GetString();
-                    for (std::size_t i = 0; i < names.size(); ++i) if (names[i] == s) vis[i] = true;
-                }
+            for (auto& v : arr) if (v.IsString()) {
+                std::string s = v.GetString();
+                for (std::size_t i = 0; i < names.size(); ++i) if (names[i] == s) vis[i] = true;
+            }
+            // If user never selected anything (empty or all false), treat as default: all true
+            bool anySelected = false; for (bool b : vis) if (b) { anySelected = true; break; }
+            if (!anySelected) std::ranges::fill(vis, true);
             MessagingProfilerUI::SetInitialVisibility(vis);
         }
     }
@@ -54,15 +52,10 @@ namespace LogSettings {
         auto names = MessagingProfilerBackend::GetMessageTypeNames();
         auto vis = MessagingProfilerUI::GetCurrentVisibility();
         rapidjson::Value arr(rapidjson::kArrayType);
-        for (std::size_t i = 0; i < names.size() && i < vis.size(); ++i) if (vis[i]) arr.PushBack(
-            rapidjson::Value(names[i].data(), a), a);
+        for (std::size_t i = 0; i < names.size() && i < vis.size(); ++i) if (vis[i]) arr.PushBack(rapidjson::Value(names[i].data(), a), a);
         doc.AddMember("profiler_visible", arr, a);
-        rapidjson::StringBuffer sb;
-        rapidjson::Writer<rapidjson::StringBuffer> wr(sb);
-        doc.Accept(wr);
+        rapidjson::StringBuffer sb; rapidjson::Writer<rapidjson::StringBuffer> wr(sb); doc.Accept(wr);
         auto path = GetConfigPath();
-        std::ofstream ofs(path, std::ios::trunc);
-        if (!ofs.is_open()) return;
-        ofs << sb.GetString();
+        std::ofstream ofs(path, std::ios::trunc); if (!ofs.is_open()) return; ofs << sb.GetString();
     }
 };

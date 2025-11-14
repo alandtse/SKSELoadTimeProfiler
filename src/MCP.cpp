@@ -33,7 +33,7 @@ void MCP::Register() {
         logger::error("SKSEMenuFramework is not installed.");
         return;
     }
-    SKSEMenuFramework::SetSection(Utilities::mod_name);
+    SKSEMenuFramework::SetSection("Utilities");
     SKSEMenuFramework::AddSectionItem("Reference", Reference::Render);
     SKSEMenuFramework::AddSectionItem("Log", RenderLog);
     SKSEMenuFramework::AddSectionItem("Messaging Profiler", RenderProfiler);
@@ -63,7 +63,7 @@ void __stdcall MCP::RenderLog() {
 }
 
 void __stdcall MCP::RenderProfiler() {
-    static MessagingProfilerUI::State& state = *([]() { return new MessagingProfilerUI::State(); })();
+    MessagingProfilerUI::State& state = MessagingProfilerUI::GetState();
     ImGui::TextUnformatted("Messaging Callback Durations (ms)");
     ImGui::Separator();
     bool thresholdsDirty = false;

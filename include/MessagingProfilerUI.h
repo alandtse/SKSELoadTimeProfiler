@@ -1,6 +1,5 @@
 #pragma once
 
-// Backend accessors implemented in plugin.cpp
 namespace MessagingProfilerBackend {
     std::vector<std::string_view> GetMessageTypeNames();
     std::vector<std::pair<std::string, std::array<double, SKSE::MessagingInterface::kTotal>>> GetAverageDurations();
@@ -9,11 +8,14 @@ namespace MessagingProfilerBackend {
 
 namespace MessagingProfilerUI {
     struct State {
-        std::vector<bool> selected; // matches GetMessageTypeNames size
-        int sortColumn = 0; // 0 module, 1 total, >=2 message columns
+        std::vector<bool> selected;
+        int sortColumn = 0;
         bool sortAsc = true;
         bool initializedFromDisk = false;
     };
+
+    // Access global persistent state (single instance)
+    State& GetState();
 
     void EnsureSelectionSize(State& s, std::size_t count);
     void Render(State& s, double warnMs, double critMs);
