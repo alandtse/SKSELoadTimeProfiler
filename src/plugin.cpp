@@ -3,10 +3,7 @@
 #include "MessagingProfiler.h"
 #include "Settings.h"
 
-void OnMessage(SKSE::MessagingInterface::Message* message) {
-    if (message->type == SKSE::MessagingInterface::kDataLoaded) {
-        MessagingProfiler::Dump();
-    }
+void OnMessage(SKSE::MessagingInterface::Message*) {
 }
 
 SKSEPluginLoad(const SKSE::LoadInterface* skse) {

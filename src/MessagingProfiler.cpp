@@ -91,7 +91,7 @@ namespace MessagingProfiler {
         const auto idx = g_nextIndex.fetch_add(1, std::memory_order_relaxed);
         if (idx >= MAX_WRAPPERS) { logger::warn("[Profiler] Trampoline capacity exceeded (idx={} >= {}); skipping instrumentation", idx, MAX_WRAPPERS); return original; }
         auto& e = g_entries[idx]; e.original = original; e.sender = std::string(sender); e.pluginName = ModuleNameFromAddress(callSiteRet);
-        auto tramp = MakeTrampoline(idx, &e);
+        const auto tramp = MakeTrampoline(idx, &e);
         if (!tramp) return original;
         logger::info("[Profiler] Instrumented module='{}' idx={} orig={} tramp={}", e.pluginName, idx, fmt::ptr(original), fmt::ptr(tramp));
         return tramp;
@@ -101,16 +101,16 @@ namespace MessagingProfiler {
     {
         if (!callback) return g_origRegister(handle, sender, callback);
         if (!sender || std::strcmp(sender, "SKSE") != 0) return g_origRegister(handle, sender, callback);
-        auto cb = reinterpret_cast<RawCallback>(callback);
+        const auto cb = reinterpret_cast<RawCallback>(callback);
         void* retAddr = _ReturnAddress();
-        auto wrapped = AllocateWrapper(cb, sender, retAddr);
+        const auto wrapped = AllocateWrapper(cb, sender, retAddr);
         return g_origRegister(handle, sender, reinterpret_cast<void*>(wrapped));
     }
 
     bool Hook_Dispatch(SKSE::PluginHandle handle, std::uint32_t type, void* data, std::uint32_t len, const char* receiver)
     {
         const auto start = std::chrono::high_resolution_clock::now();
-        auto r = g_origDispatch(handle, type, data, len, receiver);
+        const auto r = g_origDispatch(handle, type, data, len, receiver);
         const auto end = std::chrono::high_resolution_clock::now();
         const auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
         if (ns > 500'000) logger::info("[Profiler] Dispatch(handle={}, type={}, receiver='{}', took {:.3f} ms)", handle, type, receiver ? receiver : "<broadcast>", ns / 1'000'000.0);
@@ -161,7 +161,7 @@ namespace MessagingProfiler {
             auto& e = g_entries[i]; auto& a = acc[e.pluginName];
             for (std::uint32_t t = 0; t < SKSE::MessagingInterface::kTotal; ++t) {
                 auto& ms = e.perMessage[t];
-                uint64_t cnt = ms.count.load(std::memory_order_relaxed);
+                const uint64_t cnt = ms.count.load(std::memory_order_relaxed);
                 if (!cnt) continue;
                 a.sumCnt[t] += cnt;
                 a.sumNs[t]  += ms.totalNs.load(std::memory_order_relaxed);

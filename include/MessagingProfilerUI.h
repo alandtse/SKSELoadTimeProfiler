@@ -1,10 +1,4 @@
 #pragma once
-#include <array>
-#include <string>
-#include <string_view>
-#include <vector>
-#include <cstdint>
-#include "SKSE/Interfaces.h"
 
 // Backend accessors implemented in plugin.cpp
 namespace MessagingProfilerBackend {
@@ -18,8 +12,13 @@ namespace MessagingProfilerUI {
         std::vector<bool> selected; // matches GetMessageTypeNames size
         int sortColumn = 0; // 0 module, 1 total, >=2 message columns
         bool sortAsc = true;
+        bool initializedFromDisk = false;
     };
 
     void EnsureSelectionSize(State& s, std::size_t count);
     void Render(State& s, double warnMs, double critMs);
+
+	// Persistence helpers
+    void SetInitialVisibility(const std::vector<bool>& vis);
+    std::vector<bool> GetCurrentVisibility();
 }

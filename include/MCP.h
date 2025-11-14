@@ -23,12 +23,12 @@ private:
 namespace MCP {
     inline std::string log_path = Utilities::GetLogPath().string();
     inline std::vector<std::string> logLines;
-    inline double profilerWarnMs = 2.0; inline double profilerCritMs = 10.0;
+    inline double profilerWarnMs = 800.0; // default warn threshold
+    inline double profilerCritMs = 2000.0; // default crit threshold
 
     void Register();
     void __stdcall RenderLog();
     void __stdcall RenderProfiler();
 
-    // Forward declarations for separated modules
     namespace Reference { void __stdcall Render(); }
 }

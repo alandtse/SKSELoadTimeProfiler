@@ -3,6 +3,7 @@
 #include <Settings.h>
 #include <Utils.h>
 #include "MessagingProfilerUI.h"
+#include "ReferenceUI.h"
 
 TripletID::operator std::string_view() const noexcept { return unified_output; }
 TripletID::operator std::string() const { return unified_output; }
@@ -36,15 +37,17 @@ void __stdcall MCP::RenderLog() {
 }
 
 void __stdcall MCP::RenderProfiler() {
-    static MessagingProfilerUI::State state;
-    ImGui::TextUnformatted("Messaging Callback Average Durations (ms)");
+    static MessagingProfilerUI::State& state = *([](){ return new MessagingProfilerUI::State(); })();
+    ImGui::TextUnformatted("Messaging Callback Durations (ms)");
     ImGui::Separator();
+    bool thresholdsDirty = false;
     ImGui::PushID("prof-thresholds");
-    ImGui::SetNextItemWidth(120); { float warn = static_cast<float>(profilerWarnMs); if (ImGui::DragFloat("Warn (ms)", &warn, 0.1f, 0.0f, 1000.0f, "%.1f")) profilerWarnMs = warn; }
+    ImGui::SetNextItemWidth(140); { float warn = static_cast<float>(profilerWarnMs); if (ImGui::DragFloat("Warn (ms)", &warn, 10.f, 0.f, 10000.f, "%.0f")) { profilerWarnMs = warn; thresholdsDirty = true; } }
     ImGui::SameLine();
-    ImGui::SetNextItemWidth(120); { float crit = static_cast<float>(profilerCritMs); if (ImGui::DragFloat("Crit (ms)", &crit, 0.1f, 0.0f, 1000.0f, "%.1f")) profilerCritMs = crit; }
+    ImGui::SetNextItemWidth(140); { float crit = static_cast<float>(profilerCritMs); if (ImGui::DragFloat("Crit (ms)", &crit, 10.f, 0.f, 20000.f, "%.0f")) { profilerCritMs = crit; thresholdsDirty = true; } }
     ImGui::PopID();
+    if (thresholdsDirty) LogSettings::Save();
     MessagingProfilerUI::Render(state, profilerWarnMs, profilerCritMs);
     ImGui::Separator();
-    ImGui::TextWrapped("Select which message types to display. Total column sums displayed message type averages. Colors use thresholds.");
+    ImGui::TextWrapped("Totals row sums visible per-module averages for selected message types. Threshold colors use warn/crit values.");
 }

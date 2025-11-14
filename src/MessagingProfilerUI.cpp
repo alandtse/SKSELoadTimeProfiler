@@ -1,6 +1,6 @@
 #include "MessagingProfilerUI.h"
 #include "MCP.h"
-#include <SKSEMCP/SKSEMenuFramework.hpp> // brings in ImGui
+#include <SKSEMCP/SKSEMenuFramework.hpp>
 #include <algorithm>
 
 namespace MessagingProfilerBackend {
@@ -10,6 +10,8 @@ namespace MessagingProfilerBackend {
 }
 
 namespace MessagingProfilerUI {
+    static State g_state; // global UI state for persistence
+
     void EnsureSelectionSize(State& s, std::size_t count) {
         if (s.selected.size() != count) s.selected.assign(count, true);
     }
@@ -21,8 +23,14 @@ namespace MessagingProfilerUI {
         if (col) ImGui::TableSetBgColor(ImGuiTableBgTarget_CellBg, col);
     }
 
+    void SetInitialVisibility(const std::vector<bool>& vis) {
+        g_state.selected = vis; g_state.initializedFromDisk = true;
+    }
+
+    std::vector<bool> GetCurrentVisibility() { return g_state.selected; }
+
     void Render(State& s, double warnMs, double critMs) {
-        auto names = MessagingProfilerBackend::GetMessageTypeNames();
+        const auto names = MessagingProfilerBackend::GetMessageTypeNames();
         EnsureSelectionSize(s, names.size());
         auto rows = MessagingProfilerBackend::GetAverageDurations();
 
@@ -48,10 +56,10 @@ namespace MessagingProfilerUI {
         if (ImGui::BeginTable("##msgprof2", static_cast<int>(active.size()) + 2, ImGuiTableFlags_RowBg|ImGuiTableFlags_Borders|ImGuiTableFlags_Resizable|ImGuiTableFlags_Reorderable|ImGuiTableFlags_Sortable|ImGuiTableFlags_ScrollX|ImGuiTableFlags_ScrollY)) {
             ImGui::TableSetupColumn("Module", ImGuiTableColumnFlags_DefaultSort|ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableSetupColumn("Total", ImGuiTableColumnFlags_PreferSortDescending);
-            for (auto idx : active) ImGui::TableSetupColumn(names[idx].data(), ImGuiTableColumnFlags_PreferSortDescending);
+            for (const auto idx : active) ImGui::TableSetupColumn(names[idx].data(), ImGuiTableColumnFlags_PreferSortDescending);
             ImGui::TableHeadersRow();
 
-            if (ImGuiTableSortSpecs* sortSpecs = ImGui::TableGetSortSpecs()) {
+            if (const ImGuiTableSortSpecs* sortSpecs = ImGui::TableGetSortSpecs()) {
                 if (sortSpecs->SpecsCount>0) {
                     s.sortColumn = sortSpecs->Specs[0].ColumnIndex;
                     s.sortAsc = sortSpecs->Specs[0].SortDirection == ImGuiSortDirection_Ascending;
@@ -61,14 +69,14 @@ namespace MessagingProfilerUI {
             struct RowWrap { std::string module; double total; const std::array<double, SKSE::MessagingInterface::kTotal>* vals; };
             std::vector<RowWrap> enriched; enriched.reserve(rows.size());
             for (auto& r : rows) {
-                double sum=0.0; for (auto idx:active){ double v=r.second[idx]; if(v<1.0) v=0.0; sum+=v; }
+                double sum=0.0; for (const auto idx:active){ double v=r.second[idx]; if(v<1.0) v=0.0; sum+=v; }
                 enriched.push_back({r.first,sum,&r.second});
             }
 
             std::sort(enriched.begin(), enriched.end(), [&](const RowWrap& A, const RowWrap& B){
                 if (s.sortColumn==0) return s.sortAsc ? A.module < B.module : A.module > B.module;
                 if (s.sortColumn==1) return s.sortAsc ? A.total < B.total : A.total > B.total;
-                std::size_t msgIdx = active[s.sortColumn-2];
+                const std::size_t msgIdx = active[s.sortColumn-2];
                 double av = (*A.vals)[msgIdx]; if (av<1.0) av=0.0;
                 double bv = (*B.vals)[msgIdx]; if (bv<1.0) bv=0.0;
                 return s.sortAsc ? av < bv : av > bv;
@@ -76,18 +84,19 @@ namespace MessagingProfilerUI {
 
             // Compute displayed column totals from enriched rows
             std::vector<double> colTotals(active.size(), 0.0);
-            for (auto& e : enriched) {
+            for (const auto& e : enriched) {
                 for (std::size_t c=0; c<active.size(); ++c) {
                     double v = (*e.vals)[active[c]]; if (v < 1.0) v = 0.0; colTotals[c] += v;
                 }
             }
-            double totalsSum = 0.0; for (double v : colTotals) totalsSum += v;
+            double totalsSum = 0.0; for (const double v : colTotals) totalsSum += v;
 
             // Totals row based on displayed values
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("<Totals>");
             ImGui::TableSetColumnIndex(1); { ColorCell(totalsSum,warnMs,critMs); ImGui::Text("%.1f", totalsSum); }
-            for (std::size_t c=0;c<active.size();++c){ ImGui::TableSetColumnIndex(static_cast<int>(c+2)); double v=colTotals[c]; ColorCell(v,warnMs,critMs); ImGui::Text("%.1f", v);}            
+            for (std::size_t c=0;c<active.size();++c){ ImGui::TableSetColumnIndex(static_cast<int>(c+2));
+                const double v=colTotals[c]; ColorCell(v,warnMs,critMs); ImGui::Text("%.1f", v);}            
 
             // Module rows
             for (auto& e : enriched) {
