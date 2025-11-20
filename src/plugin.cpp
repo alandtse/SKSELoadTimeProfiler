@@ -2,6 +2,7 @@
 #include "Logger.h"
 #include "MessagingProfiler.h"
 #include "Settings.h"
+#include "Hooks.h"
 
 void OnMessage(SKSE::MessagingInterface::Message*) {
 }
@@ -9,6 +10,8 @@ void OnMessage(SKSE::MessagingInterface::Message*) {
 SKSEPluginLoad(const SKSE::LoadInterface* skse) {
     SetupLog();
     SKSE::Init(skse);
+
+    Hooks::Install();
     LogSettings::Load();
     MessagingProfiler::Install();
     logger::info("Plugin loaded");
