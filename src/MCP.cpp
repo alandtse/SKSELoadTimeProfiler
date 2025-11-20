@@ -5,6 +5,7 @@
 #include "MessagingProfilerUI.h"
 #include "ReferenceUI.h"
 #include "ClibUtil/editorID.hpp"
+#include "MessagingProfiler.h"
 
 TripletID::operator std::string_view() const noexcept { return unified_output; }
 TripletID::operator std::string() const { return unified_output; }
@@ -64,7 +65,7 @@ void __stdcall MCP::RenderLog() {
 
 void __stdcall MCP::RenderProfiler() {
     MessagingProfilerUI::State& state = MessagingProfilerUI::GetState();
-    ImGui::TextUnformatted("Messaging Callback Durations (ms)");
+    ImGui::TextUnformatted("Messaging Callback Durations (ms) & ESP Load Times");
     ImGui::Separator();
     bool thresholdsDirty = false;
     ImGui::PushID("prof-thresholds");
@@ -88,8 +89,17 @@ void __stdcall MCP::RenderProfiler() {
     ImGui::PopID();
     if (ImGui::Button("Save Settings")) LogSettings::Save();
     if (thresholdsDirty) LogSettings::Save();
+
+    // New visibility filters for source kind
+    ImGui::Separator();
+    ImGui::TextUnformatted("Source Filters:");
+    ImGui::SameLine();
+    bool dll = MCP::showDllEntries; if (ImGui::Checkbox("DLL", &dll)) { MCP::showDllEntries = dll; LogSettings::Save(); }
+    ImGui::SameLine();
+    bool esp = MCP::showEspEntries; if (ImGui::Checkbox("ESP", &esp)) { MCP::showEspEntries = esp; LogSettings::Save(); }
+
     MessagingProfilerUI::Render(state, profilerWarnMs, profilerCritMs);
     ImGui::Separator();
     ImGui::TextWrapped(
-        "Totals row sums visible per-module averages for selected message types. Threshold colors use warn/crit values.");
+        "Totals row sums visible per-module averages for selected message types. Threshold colors use warn/crit values. ESP rows only show total load time aggregated.");
 }

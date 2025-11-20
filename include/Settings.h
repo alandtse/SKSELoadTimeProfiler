@@ -29,6 +29,8 @@ namespace LogSettings {
         if (doc.HasParseError() || !doc.IsObject()) return;
         if (doc.HasMember("profiler_warn_ms") && doc["profiler_warn_ms"].IsNumber()) MCP::profilerWarnMs = doc["profiler_warn_ms"].GetDouble();
         if (doc.HasMember("profiler_crit_ms") && doc["profiler_crit_ms"].IsNumber()) MCP::profilerCritMs = doc["profiler_crit_ms"].GetDouble();
+        if (doc.HasMember("show_dll_entries") && doc["show_dll_entries"].IsBool()) MCP::showDllEntries = doc["show_dll_entries"].GetBool();
+        if (doc.HasMember("show_esp_entries") && doc["show_esp_entries"].IsBool()) MCP::showEspEntries = doc["show_esp_entries"].GetBool();
         if (doc.HasMember("profiler_visible") && doc["profiler_visible"].IsArray()) {
             auto arr = doc["profiler_visible"].GetArray();
             auto names = MessagingProfilerBackend::GetMessageTypeNames();
@@ -49,6 +51,8 @@ namespace LogSettings {
         auto& a = doc.GetAllocator();
         doc.AddMember("profiler_warn_ms", MCP::profilerWarnMs, a);
         doc.AddMember("profiler_crit_ms", MCP::profilerCritMs, a);
+        doc.AddMember("show_dll_entries", MCP::showDllEntries, a);
+        doc.AddMember("show_esp_entries", MCP::showEspEntries, a);
         auto names = MessagingProfilerBackend::GetMessageTypeNames();
         auto vis = MessagingProfilerUI::GetCurrentVisibility();
         rapidjson::Value arr(rapidjson::kArrayType);

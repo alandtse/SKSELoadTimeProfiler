@@ -3,6 +3,7 @@
 #include <unordered_map>
 #include <algorithm>
 #include <windows.h>
+#include "Hooks.h"
 
 namespace MessagingProfiler {
     struct MessagingExpose : SKSE::MessagingInterface { const void* RawProxy() const { return GetProxy(); } };
@@ -75,7 +76,7 @@ namespace MessagingProfiler {
     RawCallback MakeTrampoline(std::size_t idx, CallbackEntry* entry)
     {
         if (!g_trampBase) { logger::warn("[Profiler] Trampoline pool nullptr; skipping instrumentation"); return nullptr; }
-        if (idx >= MAX_WRAPPERS) { logger::warn("[Profiler] Trampoline capacity exceeded at idx={}; skipping instrumentation", idx); return nullptr; }
+        if (idx >= MAX_WRAPPERS) { logger::warn("[Profiler] Trampoline capacity exceeded at idx={}; skipping instrumentation", idx, MAX_WRAPPERS); return nullptr; }
         uint8_t* code = g_trampBase + idx * TRAMP_SIZE;
         code[0] = 0x48; code[1] = 0x8B; code[2] = 0xD1;                  // mov rdx, rcx
         code[3] = 0x48; code[4] = 0xB9; *reinterpret_cast<void**>(&code[5]) = entry; // mov rcx, imm64
@@ -151,7 +152,8 @@ namespace MessagingProfiler {
         }
     }
 
-    struct ModuleRow { std::string module; std::array<double, SKSE::MessagingInterface::kTotal> avgMs{}; };
+    enum class SourceKind { DLL, ESP };
+    struct ModuleRow { std::string module; std::array<double, SKSE::MessagingInterface::kTotal> avgMs{}; SourceKind kind = SourceKind::DLL; double espTotalMs = 0.0; };
 
     std::vector<ModuleRow> GetModuleRowsSnapshot() {
         struct Accum { std::array<uint64_t, SKSE::MessagingInterface::kTotal> sumNs{}; std::array<uint64_t, SKSE::MessagingInterface::kTotal> sumCnt{}; };
@@ -167,13 +169,18 @@ namespace MessagingProfiler {
                 a.sumNs[t]  += ms.totalNs.load(std::memory_order_relaxed);
             }
         }
+        // Convert to rows (DLL kind)
         std::vector<ModuleRow> out; out.reserve(acc.size());
         for (auto& [module, a] : acc) {
-            ModuleRow row; row.module = module;
+            ModuleRow row; row.module = module; row.kind = SourceKind::DLL;
             for (std::uint32_t t = 0; t < SKSE::MessagingInterface::kTotal; ++t) {
                 row.avgMs[t] = a.sumCnt[t] ? (static_cast<double>(a.sumNs[t]) / a.sumCnt[t]) / 1'000'000.0 : 0.0;
             }
             out.emplace_back(std::move(row));
+        }
+        // Append ESP rows (no per-message breakdown, only total; keep array zero)
+        for (auto& p : ESPProfiling::SnapshotTotals()) {
+            ModuleRow esp; esp.module = p.first; esp.kind = SourceKind::ESP; esp.espTotalMs = static_cast<double>(p.second)/1'000'000.0; out.emplace_back(std::move(esp));
         }
         std::sort(out.begin(), out.end(), [](const ModuleRow& A, const ModuleRow& B){ return A.module < B.module; });
         return out;
@@ -181,7 +188,13 @@ namespace MessagingProfiler {
 
     std::vector<std::string_view> GetMessageTypeNames() { std::vector<std::string_view> names; names.reserve(SKSE::MessagingInterface::kTotal); for (std::uint32_t t = 0; t < SKSE::MessagingInterface::kTotal; ++t) names.emplace_back(MessageTypeName(t)); return names; }
 
-    std::vector<std::pair<std::string, std::array<double, SKSE::MessagingInterface::kTotal>>> GetAverageDurations() { std::vector<std::pair<std::string, std::array<double, SKSE::MessagingInterface::kTotal>>> rows; for (auto& r : GetModuleRowsSnapshot()) rows.emplace_back(r.module, r.avgMs); return rows; }
+    // Updated: also return source kind and esp total
+    struct AverageRow { std::string module; std::array<double, SKSE::MessagingInterface::kTotal> avg; SourceKind kind; double espTotal; };
+
+    std::vector<AverageRow> GetAverageRows() {
+        std::vector<AverageRow> rows; for (auto& r : GetModuleRowsSnapshot()) rows.push_back({r.module, r.avgMs, r.kind, r.espTotalMs}); return rows; }
+
+    std::vector<std::pair<std::string, std::array<double, SKSE::MessagingInterface::kTotal>>> GetAverageDurations() { std::vector<std::pair<std::string, std::array<double, SKSE::MessagingInterface::kTotal>>> rows; for (auto& r : GetModuleRowsSnapshot()) if (r.kind==SourceKind::DLL) rows.emplace_back(r.module, r.avgMs); else rows.emplace_back(r.module, r.avgMs); return rows; }
 
     std::array<double, SKSE::MessagingInterface::kTotal> GetTotalsAvgMs() { std::array<double, SKSE::MessagingInterface::kTotal> result{}; for (std::uint32_t t = 0; t < SKSE::MessagingInterface::kTotal; ++t) { uint64_t totNs=0, cnt=0; for (std::size_t i = 0; i < g_nextIndex.load(std::memory_order_relaxed); ++i) { auto& e = g_entries[i]; totNs += e.perMessage[t].totalNs.load(std::memory_order_relaxed); cnt += e.perMessage[t].count.load(std::memory_order_relaxed);} result[t] = cnt ? (static_cast<double>(totNs) / cnt) / 1'000'000.0 : 0.0; } return result; }
 }
@@ -196,5 +209,15 @@ namespace MessagingProfilerBackend {
     }
     std::array<double, SKSE::MessagingInterface::kTotal> GetTotalsAvgMs() {
         return MessagingProfiler::GetTotalsAvgMs();
+    }
+    // New exposure for combined tagged rows
+    enum class SourceKind { DLL, ESP };
+    struct TaggedRow { std::string module; SourceKind kind; double totalMs; std::array<double, SKSE::MessagingInterface::kTotal> perMsg{}; };
+    std::vector<TaggedRow> GetTaggedRows() {
+        std::vector<TaggedRow> out; auto names = MessagingProfiler::GetModuleRowsSnapshot();
+        for (auto& r : names) {
+            TaggedRow tr; tr.module = r.module; tr.kind = (r.kind == MessagingProfiler::SourceKind::DLL ? SourceKind::DLL : SourceKind::ESP); tr.totalMs = (r.kind==MessagingProfiler::SourceKind::ESP) ? r.espTotalMs : std::accumulate(r.avgMs.begin(), r.avgMs.end(), 0.0); tr.perMsg = r.avgMs; out.emplace_back(std::move(tr));
+        }
+        return out;
     }
 }

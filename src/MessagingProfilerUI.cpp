@@ -5,10 +5,14 @@
 #include <unordered_map>
 #include <windows.h>
 #include "Settings.h"
+#include "MessagingProfiler.h"
 
 namespace MessagingProfilerBackend {
     std::vector<std::string_view> GetMessageTypeNames();
     std::vector<std::pair<std::string, std::array<double, SKSE::MessagingInterface::kTotal>>> GetAverageDurations();
+    enum class SourceKind { DLL, ESP };
+    struct TaggedRow { std::string module; SourceKind kind; double totalMs; std::array<double, SKSE::MessagingInterface::kTotal> perMsg{}; };
+    std::vector<TaggedRow> GetTaggedRows();
 }
 
 namespace MessagingProfilerUI {
@@ -59,7 +63,8 @@ namespace MessagingProfilerUI {
             bool any=false; for(bool b: s.selected){ if(b){ any=true; break; } }
             if(!any) std::fill(s.selected.begin(), s.selected.end(), true);
         }
-        auto rows = MessagingProfilerBackend::GetAverageDurations();
+
+        auto taggedRows = MessagingProfilerBackend::GetTaggedRows();
 
         if (ImGui::CollapsingHeader("Message Types")) {
             ImGui::Indent();
@@ -79,20 +84,31 @@ namespace MessagingProfilerUI {
         std::vector<std::size_t> active; for (std::size_t i=0;i<s.selected.size();++i) if (s.selected[i]) active.push_back(i);
         if (active.empty()) { ImGui::TextUnformatted("No message types selected."); return; }
 
-        if (ImGui::BeginTable("##msgprof2", static_cast<int>(active.size()) + 2, ImGuiTableFlags_RowBg|ImGuiTableFlags_Borders|ImGuiTableFlags_Resizable|ImGuiTableFlags_Reorderable|ImGuiTableFlags_Sortable|ImGuiTableFlags_ScrollX|ImGuiTableFlags_ScrollY)) {
+        // Apply source filters from MCP
+        taggedRows.erase(std::remove_if(taggedRows.begin(), taggedRows.end(), [](const MessagingProfilerBackend::TaggedRow& r){
+            if (r.kind == MessagingProfilerBackend::SourceKind::DLL && !MCP::showDllEntries) return true;
+            if (r.kind == MessagingProfilerBackend::SourceKind::ESP && !MCP::showEspEntries) return true;
+            return false;
+        }), taggedRows.end());
+
+        if (ImGui::BeginTable("##msgprof2", static_cast<int>(active.size()) + 3, ImGuiTableFlags_RowBg|ImGuiTableFlags_Borders|ImGuiTableFlags_Resizable|ImGuiTableFlags_Reorderable|ImGuiTableFlags_Sortable|ImGuiTableFlags_ScrollX|ImGuiTableFlags_ScrollY)) {
             ImGui::TableSetupColumn("Module", ImGuiTableColumnFlags_DefaultSort|ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_PreferSortDescending);
             ImGui::TableSetupColumn("Total", ImGuiTableColumnFlags_PreferSortDescending);
             for (auto idx : active) ImGui::TableSetupColumn(names[idx].data(), ImGuiTableColumnFlags_PreferSortDescending);
             ImGui::TableHeadersRow();
             if (ImGuiTableSortSpecs* sortSpecs = ImGui::TableGetSortSpecs()) if (sortSpecs->SpecsCount>0) { s.sortColumn = sortSpecs->Specs[0].ColumnIndex; s.sortAsc = sortSpecs->Specs[0].SortDirection == ImGuiSortDirection_Ascending; }
-            struct RowWrap { std::string module; double total; const std::array<double, SKSE::MessagingInterface::kTotal>* vals; };
-            std::vector<RowWrap> enriched; enriched.reserve(rows.size());
-            for (auto& r : rows) { double sum=0.0; for (auto idx:active){ double v=r.second[idx]; if(v<1.0) v=0.0; sum+=v; } enriched.push_back({r.first,sum,&r.second}); }
-            std::sort(enriched.begin(), enriched.end(), [&](const RowWrap& A, const RowWrap& B){ if (s.sortColumn==0) return s.sortAsc ? A.module < B.module : A.module > B.module; if (s.sortColumn==1) return s.sortAsc ? A.total < B.total : A.total > B.total; std::size_t msgIdx = active[s.sortColumn-2]; double av = (*A.vals)[msgIdx]; if(av<1.0) av=0.0; double bv = (*B.vals)[msgIdx]; if(bv<1.0) bv=0.0; return s.sortAsc ? av < bv : av > bv; });
-            std::vector<double> colTotals(active.size(), 0.0); for (auto& e : enriched) for (std::size_t c=0;c<active.size();++c){ double v=(*e.vals)[active[c]]; if(v<1.0) v=0.0; colTotals[c]+=v; }
-            double totalsSum=0.0; for(double v: colTotals) totalsSum+=v;
-            ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("<Totals>"); ImGui::TableSetColumnIndex(1); { ColorCell(totalsSum,warnMs,critMs); ImGui::Text("%.1f", totalsSum);} for (std::size_t c=0;c<active.size();++c){ ImGui::TableSetColumnIndex(static_cast<int>(c+2)); double v=colTotals[c]; ColorCell(v,warnMs,critMs); ImGui::Text("%.1f", v);}            
-            for (auto& e : enriched) { ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted(e.module.c_str()); if (ImGui::IsItemHovered()) { auto it = g_metaCache.find(e.module); if (it == g_metaCache.end()) it = g_metaCache.emplace(e.module, GetDllMeta(e.module)).first; if (ImGui::BeginTooltip()) { ImGui::TextUnformatted(e.module.c_str()); if (it->second.ok) { if (!it->second.author.empty()) ImGui::Text("Author: %s", it->second.author.c_str()); if (!it->second.version.empty()) ImGui::Text("Version: %s", it->second.version.c_str()); if (!it->second.license.empty()) ImGui::Text("License: %s", it->second.license.c_str()); } else { ImGui::TextUnformatted("(no version info)"); } ImGui::EndTooltip(); } } ImGui::TableSetColumnIndex(1); ColorCell(e.total,warnMs,critMs); ImGui::Text("%.1f", e.total); for (std::size_t c=0;c<active.size();++c){ ImGui::TableSetColumnIndex(static_cast<int>(c+2)); double v=(*e.vals)[active[c]]; if(v<1.0) v=0.0; ColorCell(v,warnMs,critMs); ImGui::Text("%.1f", v);} }
+            struct RowWrap { std::string module; std::string typeStr; double total; const std::array<double, SKSE::MessagingInterface::kTotal>* vals; bool isEsp; };
+            std::vector<RowWrap> enriched; enriched.reserve(taggedRows.size());
+            for (auto& r : taggedRows) {
+                double sum=0.0; if (r.kind==MessagingProfilerBackend::SourceKind::ESP) { sum = r.totalMs; } else { for (auto idx:active){ double v=r.perMsg[idx]; if(v<1.0) v=0.0; sum+=v; } }
+                enriched.push_back({r.module, r.kind==MessagingProfilerBackend::SourceKind::ESP?"ESP":"DLL", sum, &r.perMsg, r.kind==MessagingProfilerBackend::SourceKind::ESP});
+            }
+            std::sort(enriched.begin(), enriched.end(), [&](const RowWrap& A, const RowWrap& B){ if (s.sortColumn==0) return s.sortAsc ? A.module < B.module : A.module > B.module; if (s.sortColumn==1) return s.sortAsc ? A.typeStr < B.typeStr : A.typeStr > B.typeStr; if (s.sortColumn==2) return s.sortAsc ? A.total < B.total : A.total > B.total; std::size_t msgIdx = active[s.sortColumn-3]; double av = (*A.vals)[msgIdx]; if(av<1.0 || A.isEsp) av=0.0; double bv = (*B.vals)[msgIdx]; if(bv<1.0 || B.isEsp) bv=0.0; return s.sortAsc ? av < bv : av > bv; });
+            std::vector<double> colTotals(active.size(), 0.0); for (auto& e : enriched) for (std::size_t c=0;c<active.size();++c){ double v=(*e.vals)[active[c]]; if(e.isEsp || v<1.0) v=0.0; colTotals[c]+=v; }
+            double totalsSum=0.0; for(double v: colTotals) totalsSum+=v; double espExtra=0.0; for(auto& e: enriched) if(e.isEsp) espExtra += e.total; double grandTotal = totalsSum + espExtra;
+            ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted("<Totals>"); ImGui::TableSetColumnIndex(1); ImGui::TextUnformatted("-"); ImGui::TableSetColumnIndex(2); { ColorCell(grandTotal,warnMs,critMs); ImGui::Text("%.1f", grandTotal);} for (std::size_t c=0;c<active.size();++c){ ImGui::TableSetColumnIndex(static_cast<int>(c+3)); double v=colTotals[c]; ColorCell(v,warnMs,critMs); ImGui::Text("%.1f", v);}            
+            for (auto& e : enriched) { ImGui::TableNextRow(); ImGui::TableSetColumnIndex(0); ImGui::TextUnformatted(e.module.c_str()); if (!e.isEsp && ImGui::IsItemHovered()) { auto it = g_metaCache.find(e.module); if (it == g_metaCache.end()) it = g_metaCache.emplace(e.module, GetDllMeta(e.module)).first; if (ImGui::BeginTooltip()) { ImGui::TextUnformatted(e.module.c_str()); if (it->second.ok) { if (!it->second.author.empty()) ImGui::Text("Author: %s", it->second.author.c_str()); if (!it->second.version.empty()) ImGui::Text("Version: %s", it->second.version.c_str()); if (!it->second.license.empty()) ImGui::Text("License: %s", it->second.license.c_str()); } else { ImGui::TextUnformatted("(no version info)"); } ImGui::EndTooltip(); } } ImGui::TableSetColumnIndex(1); ImGui::TextUnformatted(e.typeStr.c_str()); ImGui::TableSetColumnIndex(2); ColorCell(e.total,warnMs,critMs); ImGui::Text("%.1f", e.total); for (std::size_t c=0;c<active.size();++c){ ImGui::TableSetColumnIndex(static_cast<int>(c+3)); double v=(*e.vals)[active[c]]; if(v<1.0 || e.isEsp) v=0.0; if(!e.isEsp) ColorCell(v,warnMs,critMs); ImGui::Text("%.1f", v);} }
             ImGui::EndTable();
         }
     }
