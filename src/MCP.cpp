@@ -1,11 +1,9 @@
 #include "MCP.h"
-#include <SKSEMCP/SKSEMenuFramework.hpp>
 #include <Settings.h>
 #include <Utils.h>
 #include "MessagingProfilerUI.h"
 #include "ReferenceUI.h"
 #include "ClibUtil/editorID.hpp"
-#include "MessagingProfiler.h"
 
 TripletID::operator std::string_view() const noexcept { return unified_output; }
 TripletID::operator std::string() const { return unified_output; }
@@ -24,9 +22,9 @@ TripletID::TripletID(const RE::TESForm* a_form) {
 }
 
 void TripletID::to_imgui() const {
-    ImGui::PushID(this);
+    ImGuiMCP::ImGui::PushID(this);
     MCP::UI::ReadOnlyField(nullptr, unified_output, "##triplet");
-    ImGui::PopID();
+    ImGuiMCP::ImGui::PopID();
 }
 
 void MCP::Register() {
@@ -42,64 +40,64 @@ void MCP::Register() {
 
 void __stdcall MCP::RenderLog() {
     bool dirty = false;
-    if (ImGui::Checkbox("Trace", &LogSettings::log_trace)) dirty = true;
-    ImGui::SameLine();
-    if (ImGui::Checkbox("Info", &LogSettings::log_info)) dirty = true;
-    ImGui::SameLine();
-    if (ImGui::Checkbox("Warning", &LogSettings::log_warning)) dirty = true;
-    ImGui::SameLine();
-    if (ImGui::Checkbox("Error", &LogSettings::log_error)) dirty = true;
+    if (ImGuiMCP::ImGui::Checkbox("Trace", &LogSettings::log_trace)) dirty = true;
+    ImGuiMCP::ImGui::SameLine();
+    if (ImGuiMCP::ImGui::Checkbox("Info", &LogSettings::log_info)) dirty = true;
+    ImGuiMCP::ImGui::SameLine();
+    if (ImGuiMCP::ImGui::Checkbox("Warning", &LogSettings::log_warning)) dirty = true;
+    ImGuiMCP::ImGui::SameLine();
+    if (ImGuiMCP::ImGui::Checkbox("Error", &LogSettings::log_error)) dirty = true;
     if (dirty) {
         LogSettings::Save();
         dirty = false;
     }
-    if (ImGui::Button("Generate Log")) { logLines = Utilities::ReadLogFile(); }
+    if (ImGuiMCP::ImGui::Button("Generate Log")) { logLines = Utilities::ReadLogFile(); }
     for (const auto& line : logLines) {
         if (line.find("trace") != std::string::npos && !LogSettings::log_trace) continue;
         if (line.find("info") != std::string::npos && !LogSettings::log_info) continue;
         if (line.find("warning") != std::string::npos && !LogSettings::log_warning) continue;
         if (line.find("error") != std::string::npos && !LogSettings::log_error) continue;
-        ImGui::Text("%s", line.c_str());
+        ImGuiMCP::ImGui::Text("%s", line.c_str());
     }
 }
 
 void __stdcall MCP::RenderProfiler() {
     MessagingProfilerUI::State& state = MessagingProfilerUI::GetState();
-    ImGui::TextUnformatted("Messaging Callback Durations (ms) & ESP Load Times");
-    ImGui::Separator();
+    ImGuiMCP::ImGui::TextUnformatted("Messaging Callback Durations (ms) & ESP Load Times");
+    ImGuiMCP::ImGui::Separator();
     bool thresholdsDirty = false;
-    ImGui::PushID("prof-thresholds");
-    ImGui::SetNextItemWidth(140);
+    ImGuiMCP::ImGui::PushID("prof-thresholds");
+    ImGuiMCP::ImGui::SetNextItemWidth(140);
     {
         float warn = static_cast<float>(profilerWarnMs);
-        if (ImGui::DragFloat("Warn (ms)", &warn, 10.f, 0.f, 10000.f, "%.0f")) {
+        if (ImGuiMCP::ImGui::DragFloat("Warn (ms)", &warn, 10.f, 0.f, 10000.f, "%.0f")) {
             profilerWarnMs = warn;
             thresholdsDirty = true;
         }
     }
-    ImGui::SameLine();
-    ImGui::SetNextItemWidth(140);
+    ImGuiMCP::ImGui::SameLine();
+    ImGuiMCP::ImGui::SetNextItemWidth(140);
     {
         float crit = static_cast<float>(profilerCritMs);
-        if (ImGui::DragFloat("Crit (ms)", &crit, 10.f, 0.f, 20000.f, "%.0f")) {
+        if (ImGuiMCP::ImGui::DragFloat("Crit (ms)", &crit, 10.f, 0.f, 20000.f, "%.0f")) {
             profilerCritMs = crit;
             thresholdsDirty = true;
         }
     }
-    ImGui::PopID();
-    if (ImGui::Button("Save Settings")) LogSettings::Save();
+    ImGuiMCP::ImGui::PopID();
+    if (ImGuiMCP::ImGui::Button("Save Settings")) LogSettings::Save();
     if (thresholdsDirty) LogSettings::Save();
 
     // New visibility filters for source kind
-    ImGui::Separator();
-    ImGui::TextUnformatted("Source Filters:");
-    ImGui::SameLine();
-    bool dll = MCP::showDllEntries; if (ImGui::Checkbox("DLL", &dll)) { MCP::showDllEntries = dll; LogSettings::Save(); }
-    ImGui::SameLine();
-    bool esp = MCP::showEspEntries; if (ImGui::Checkbox("ESP", &esp)) { MCP::showEspEntries = esp; LogSettings::Save(); }
+    ImGuiMCP::ImGui::Separator();
+    ImGuiMCP::ImGui::TextUnformatted("Source Filters:");
+    ImGuiMCP::ImGui::SameLine();
+    bool dll = MCP::showDllEntries; if (ImGuiMCP::ImGui::Checkbox("DLL", &dll)) { MCP::showDllEntries = dll; LogSettings::Save(); }
+    ImGuiMCP::ImGui::SameLine();
+    bool esp = MCP::showEspEntries; if (ImGuiMCP::ImGui::Checkbox("ESP", &esp)) { MCP::showEspEntries = esp; LogSettings::Save(); }
 
     MessagingProfilerUI::Render(state, profilerWarnMs, profilerCritMs);
-    ImGui::Separator();
-    ImGui::TextWrapped(
+    ImGuiMCP::ImGui::Separator();
+    ImGuiMCP::ImGui::TextWrapped(
         "Totals row sums visible per-module averages for selected message types. Threshold colors use warn/crit values. ESP rows only show total load time aggregated.");
 }

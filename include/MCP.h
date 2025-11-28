@@ -7,11 +7,11 @@ static void HelpMarker(const char* desc);
 namespace MCP::UI {
     inline void ReadOnlyField(const char* label, const std::string& value, const char* id) {
         if (label && *label) {
-            ImGui::TextUnformatted(label);
-            ImGui::SameLine();
+            ImGuiMCP::ImGui::TextUnformatted(label);
+            ImGuiMCP::ImGui::SameLine();
         }
         std::string buffer = value;
-        ImGui::InputText(id, buffer.data(), buffer.size() + 1, ImGuiInputTextFlags_ReadOnly);
+        ImGuiMCP::ImGui::InputText(id, buffer.data(), buffer.size() + 1, ImGuiMCP::ImGuiInputTextFlags_ReadOnly);
     }
 }
 

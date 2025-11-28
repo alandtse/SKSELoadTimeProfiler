@@ -1,8 +1,7 @@
 #pragma once
-#include "MCP.h"
-#include "SKSE/Interfaces.h"
 #include <tuple>
 #include <vector>
+#include "MCP.h"
 
 namespace MCP::Reference {
     using ExtraDataType = RE::ExtraDataType;
