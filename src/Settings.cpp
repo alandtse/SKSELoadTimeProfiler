@@ -7,12 +7,10 @@
 #include "rapidjson/writer.h"
 
 std::filesystem::path LogSettings::GetConfigPath() {
-    const auto plugin = SKSE::PluginDeclaration::GetSingleton()->GetName();
-    const std::filesystem::path dllPath{REL::Module::get().filename()};
-    const auto dir = dllPath.parent_path() / std::filesystem::path(plugin);
+    const std::filesystem::path path = R"(Data/SKSE/Plugins/LoadTimeProfiler/LoadTimeProfiler.json)";
     std::error_code ec;
-    std::filesystem::create_directories(dir, ec);
-    return dir / std::format("{}.json", plugin);
+    std::filesystem::create_directories(path.parent_path(), ec);
+    return path;
 }
 
 void LogSettings::Load() {
