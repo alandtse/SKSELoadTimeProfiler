@@ -1,6 +1,5 @@
 #include "MCP.h"
 #include <Settings.h>
-#include <Utils.h>
 #include "MessagingProfilerUI.h"
 
 
@@ -10,31 +9,7 @@ void MCP::Register() {
         return;
     }
     SKSEMenuFramework::SetSection("Utilities");
-    SKSEMenuFramework::AddSectionItem("Log", RenderLog);
     SKSEMenuFramework::AddSectionItem("Messaging Profiler", RenderProfiler);
-}
-
-void __stdcall MCP::RenderLog() {
-    bool dirty = false;
-    if (ImGuiMCP::ImGui::Checkbox("Trace", &LogSettings::log_trace)) dirty = true;
-    ImGuiMCP::ImGui::SameLine();
-    if (ImGuiMCP::ImGui::Checkbox("Info", &LogSettings::log_info)) dirty = true;
-    ImGuiMCP::ImGui::SameLine();
-    if (ImGuiMCP::ImGui::Checkbox("Warning", &LogSettings::log_warning)) dirty = true;
-    ImGuiMCP::ImGui::SameLine();
-    if (ImGuiMCP::ImGui::Checkbox("Error", &LogSettings::log_error)) dirty = true;
-    if (dirty) {
-        LogSettings::Save();
-        dirty = false;
-    }
-    if (ImGuiMCP::ImGui::Button("Generate Log")) { logLines = Utilities::ReadLogFile(); }
-    for (const auto& line : logLines) {
-        if (line.find("trace") != std::string::npos && !LogSettings::log_trace) continue;
-        if (line.find("info") != std::string::npos && !LogSettings::log_info) continue;
-        if (line.find("warning") != std::string::npos && !LogSettings::log_warning) continue;
-        if (line.find("error") != std::string::npos && !LogSettings::log_error) continue;
-        ImGuiMCP::ImGui::Text("%s", line.c_str());
-    }
 }
 
 void __stdcall MCP::RenderProfiler() {
@@ -61,8 +36,8 @@ void __stdcall MCP::RenderProfiler() {
         }
     }
     ImGuiMCP::ImGui::PopID();
-    if (ImGuiMCP::ImGui::Button("Save Settings")) LogSettings::Save();
-    if (thresholdsDirty) LogSettings::Save();
+    if (ImGuiMCP::ImGui::Button("Save Settings")) Settings::Save();
+    if (thresholdsDirty) Settings::Save();
 
     // New visibility filters for source kind
     ImGuiMCP::ImGui::Separator();
@@ -71,13 +46,13 @@ void __stdcall MCP::RenderProfiler() {
     bool dll = showDllEntries;
     if (ImGuiMCP::ImGui::Checkbox("DLL", &dll)) {
         showDllEntries = dll;
-        LogSettings::Save();
+        Settings::Save();
     }
     ImGuiMCP::ImGui::SameLine();
     bool esp = showEspEntries;
     if (ImGuiMCP::ImGui::Checkbox("ESP", &esp)) {
         showEspEntries = esp;
-        LogSettings::Save();
+        Settings::Save();
     }
 
     MessagingProfilerUI::Render(state, profilerWarnMs, profilerCritMs);

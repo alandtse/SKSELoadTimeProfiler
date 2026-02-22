@@ -8,7 +8,7 @@ SKSEPluginLoad(const SKSE::LoadInterface* skse) {
     SetupLog();
     SKSE::Init(skse);
     Hooks::Install();
-    LogSettings::Load();
+    Settings::Load();
     MessagingProfiler::Install();
     logger::info("Plugin loaded");
     MCP::Register();

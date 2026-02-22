@@ -16,14 +16,11 @@ namespace MCP::UI {
 }
 
 namespace MCP {
-    inline std::string log_path = Utilities::GetLogPath().string();
-    inline std::vector<std::string> logLines;
     inline double profilerWarnMs = 800.0;
     inline double profilerCritMs = 2000.0;
     inline bool showDllEntries = true;
     inline bool showEspEntries = true;
 
     void Register();
-    void __stdcall RenderLog();
     void __stdcall RenderProfiler();
 }

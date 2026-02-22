@@ -1,32 +1,6 @@
 #include "Utils.h"
 #include <psapi.h>
 
-std::filesystem::path Utilities::GetLogPath() {
-    const auto logsFolder = SKSE::log::log_directory();
-    if (!logsFolder) SKSE::stl::report_and_fail("SKSE log_directory not provided, logs disabled.");
-    auto pluginName = SKSE::PluginDeclaration::GetSingleton()->GetName();
-    auto logFilePath = *logsFolder / std::format("{}.log", pluginName);
-    return logFilePath;
-}
-
-std::vector<std::string> Utilities::ReadLogFile() { // NOLINT(misc-use-internal-linkage)
-    std::vector<std::string> logLines;
-
-    std::ifstream file(GetLogPath().c_str());
-    if (!file.is_open()) {
-        return logLines;
-    }
-
-    std::string line;
-    while (std::getline(file, line)) {
-        logLines.push_back(line);
-    }
-
-    file.close();
-
-    return logLines;
-}
-
 std::optional<std::uint32_t> Utilities::hex_to_u32(std::string_view s) {
     auto is_space = [](const unsigned char c) { return std::isspace(c); };
     while (!s.empty() && is_space(s.front())) s.remove_prefix(1);

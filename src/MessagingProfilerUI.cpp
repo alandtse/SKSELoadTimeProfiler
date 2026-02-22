@@ -86,19 +86,19 @@ void MessagingProfilerUI::Render(State& s, const double warnMs, const double cri
             bool sel = s.selected[i];
             if (ImGuiMCP::ImGui::Checkbox(names[i].data(), &sel)) {
                 s.selected[i] = sel;
-                LogSettings::Save();
+                Settings::Save();
             }
             ImGuiMCP::ImGui::PopID();
             if ((i % 4) != 3) ImGuiMCP::ImGui::SameLine();
         }
         if (ImGuiMCP::ImGui::Button("All")) {
             std::ranges::fill(s.selected, true);
-            LogSettings::Save();
+            Settings::Save();
         }
         ImGuiMCP::ImGui::SameLine();
         if (ImGuiMCP::ImGui::Button("None")) {
             std::ranges::fill(s.selected, false);
-            LogSettings::Save();
+            Settings::Save();
         }
         ImGuiMCP::ImGui::Unindent();
     }

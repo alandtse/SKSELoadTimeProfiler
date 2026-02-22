@@ -6,14 +6,14 @@
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
 
-std::filesystem::path LogSettings::GetConfigPath() {
+std::filesystem::path Settings::GetConfigPath() {
     const std::filesystem::path path = R"(Data/SKSE/Plugins/LoadTimeProfiler/LoadTimeProfiler.json)";
     std::error_code ec;
     std::filesystem::create_directories(path.parent_path(), ec);
     return path;
 }
 
-void LogSettings::Load() {
+void Settings::Load() {
     auto path = GetConfigPath();
     std::ifstream ifs(path);
     if (!ifs.is_open()) return; // no file -> defaults (UI will initialize all true)
@@ -51,7 +51,7 @@ void LogSettings::Load() {
     }
 }
 
-void LogSettings::Save() {
+void Settings::Save() {
     rapidjson::Document doc(rapidjson::kObjectType);
     auto& a = doc.GetAllocator();
     doc.AddMember("profiler_warn_ms", MCP::profilerWarnMs, a);
