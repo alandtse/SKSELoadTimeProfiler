@@ -2,7 +2,6 @@
 
 namespace MessagingProfiler {
     using RawRegisterFn = bool(*)(SKSE::PluginHandle, const char*, void*);
-    using RawDispatchFn = bool(*)(SKSE::PluginHandle, std::uint32_t, void*, std::uint32_t, const char*);
     using RawCallback = void(*)(SKSE::MessagingInterface::Message*);
 
     struct MsgStat {
@@ -50,13 +49,10 @@ namespace MessagingProfiler {
 
     inline std::array<CallbackEntry, MAX_WRAPPERS> g_entries;
     inline std::atomic<std::size_t> g_nextIndex{0};
-    inline std::mutex g_dumpMutex;
 
     inline SKSE::detail::SKSEMessagingInterface* g_rawMessaging = nullptr;
     inline RawRegisterFn g_origRegister = nullptr;
-    inline RawDispatchFn g_origDispatch = nullptr;
     void Install();
-    void Dump();
 
     // Backend for UI
     const char* MessageTypeName(std::uint32_t t);
@@ -75,8 +71,6 @@ namespace MessagingProfiler {
 
     bool Hook_RegisterListener(SKSE::PluginHandle handle, const char* sender, void* callback);
 
-    bool Hook_Dispatch(SKSE::PluginHandle handle, std::uint32_t type, void* data, std::uint32_t len,
-                       const char* receiver);
 
     void Install();
 

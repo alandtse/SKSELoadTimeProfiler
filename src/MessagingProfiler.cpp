@@ -1,6 +1,5 @@
 #include "MessagingProfiler.h"
 #include "Hooks.h"
-#include "Settings.h"
 
 std::vector<MessagingProfiler::TaggedRow> MessagingProfiler::GetTaggedRows() {
     std::vector<TaggedRow> out;
@@ -33,29 +32,12 @@ void MessagingProfiler::Install() {
         return;
     }
     g_origRegister = g_rawMessaging->RegisterListener;
-    g_origDispatch = g_rawMessaging->Dispatch;
     if (!g_origRegister) {
         logger::warn("[Profiler] Original RegisterListener missing");
         return;
     }
     g_rawMessaging->RegisterListener = &Hook_RegisterListener;
-    if (g_origDispatch) g_rawMessaging->Dispatch = &Hook_Dispatch;
     logger::info("[Profiler] Messaging hooks installed");
-}
-
-void MessagingProfiler::Dump() {
-    std::lock_guard lk(g_dumpMutex);
-    for (std::size_t i = 0; i < g_nextIndex.load(std::memory_order_relaxed); ++i) {
-        auto& e = g_entries[i];
-        const uint64_t c = e.count.load(std::memory_order_relaxed);
-        const uint64_t total = e.totalNs.load(std::memory_order_relaxed);
-        const uint64_t maxv = e.maxNs.load(std::memory_order_relaxed);
-        const double avgMs = c ? (static_cast<double>(total) / c) / 1'000'000.0 : 0.0;
-        const double maxMs = static_cast<double>(maxv) / 1'000'000.0;
-        const double totalMs = static_cast<double>(total) / 1'000'000.0;
-        logger::info("[Profiler] module='{}' original={} count={} avg(ms)={:.6f} max(ms)={:.6f} total(ms)={:.6f}",
-                     e.pluginName, fmt::ptr(e.original), c, avgMs, maxMs, totalMs);
-    }
 }
 
 const char* MessagingProfiler::MessageTypeName(const std::uint32_t t) {
@@ -202,8 +184,10 @@ MessagingProfiler::RawCallback MessagingProfiler::AllocateWrapper(const RawCallb
     e.pluginName = ModuleNameFromAddress(callSiteRet);
     const auto tramp = MakeTrampoline(idx, &e);
     if (!tramp) return original;
+    #ifndef NDEBUG
     logger::info("[Profiler] Instrumented module='{}' idx={} orig={} tramp={}", e.pluginName, idx,
                  fmt::ptr(original), fmt::ptr(tramp));
+    #endif
     return tramp;
 }
 
@@ -214,18 +198,6 @@ bool MessagingProfiler::Hook_RegisterListener(const SKSE::PluginHandle handle, c
     void* retAddr = _ReturnAddress();
     const auto wrapped = AllocateWrapper(cb, sender, retAddr);
     return g_origRegister(handle, sender, reinterpret_cast<void*>(wrapped));
-}
-
-bool MessagingProfiler::Hook_Dispatch(SKSE::PluginHandle handle, std::uint32_t type, void* data,
-                                      const std::uint32_t len, const char* receiver) {
-    const auto start = std::chrono::high_resolution_clock::now();
-    const auto r = g_origDispatch(handle, type, data, len, receiver);
-    const auto end = std::chrono::high_resolution_clock::now();
-    const auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
-    if (ns > LogSettings::profiler_dispatch_warn_ns)
-        logger::info("[Profiler] Dispatch(handle={}, type={}, receiver='{}', took {:.3f} ms)", handle, type,
-                     receiver ? receiver : "<broadcast>", ns / 1'000'000.0);
-    return r;
 }
 
 std::vector<MessagingProfiler::ModuleRow> MessagingProfiler::GetModuleRowsSnapshot() {
