@@ -56,7 +56,7 @@ std::string Utilities::WideToUtf8(const std::wstring& ws) {
     out.pop_back();
     return out;
 }
-
+#ifndef NDEBUG
 size_t Utilities::GetModuleSize(const HMODULE module) {
     MODULEINFO moduleInfo;
     if (GetModuleInformation(GetCurrentProcess(), module, &moduleInfo, sizeof(moduleInfo))) {
@@ -86,3 +86,4 @@ void Utilities::PrintStackTrace() {
         }
     }
 }
+#endif
