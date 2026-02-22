@@ -63,7 +63,8 @@ void LogSettings::Save() {
     rapidjson::Value arr(rapidjson::kArrayType);
     for (std::size_t i = 0; i < names.size() && i < vis.size(); ++i) {
         if (vis[i]) {
-            arr.PushBack(rapidjson::Value(names[i].data(), a), a);
+            arr.PushBack(
+                rapidjson::Value(names[i].data(), static_cast<rapidjson::SizeType>(names[i].size()), a), a);
         }
     }
     doc.AddMember("profiler_visible", arr, a);
