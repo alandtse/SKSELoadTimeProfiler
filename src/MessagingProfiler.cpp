@@ -150,7 +150,7 @@ MessagingProfiler::RawCallback MessagingProfiler::MakeTrampoline(std::size_t idx
         return nullptr;
     }
     if (idx >= MAX_WRAPPERS) {
-        logger::warn("[Profiler] Trampoline capacity exceeded at idx={}; skipping instrumentation", idx,
+        logger::warn("[Profiler] Trampoline capacity exceeded (idx={} >= {}); skipping instrumentation", idx,
                      MAX_WRAPPERS);
         return nullptr;
     }
