@@ -57,6 +57,14 @@ MessagingProfilerUI::DllMeta MessagingProfilerUI::GetDllMeta(const std::string& 
 void MessagingProfilerUI::Render(State& s, const double warnMs, const double critMs) {
     const auto names = MessagingProfiler::GetMessageTypeNames();
     EnsureSelectionSize(s, names.size());
+    ImGuiMCP::ImGui::Checkbox("Show in seconds", &s.showSeconds);
+    ImGuiMCP::ImGui::SameLine();
+    ImGuiMCP::ImGui::TextDisabled("(?)");
+    if (ImGuiMCP::ImGui::IsItemHovered()) {
+        ImGuiMCP::ImGui::BeginTooltip();
+        ImGuiMCP::ImGui::TextUnformatted("Default unit is ms.");
+        ImGuiMCP::ImGui::EndTooltip();
+    }
     // If not initialized from disk and first frame (all true already), ensure default all true explicitly.
     if (!s.initializedFromDisk && !s.selected.empty()) {
         bool any = false;
@@ -71,7 +79,7 @@ void MessagingProfilerUI::Render(State& s, const double warnMs, const double cri
 
     auto taggedRows = MessagingProfiler::GetTaggedRows();
 
-    if (ImGuiMCP::ImGui::CollapsingHeader("Message Types")) {
+    if (ImGuiMCP::ImGui::CollapsingHeader("Message Types (SKSE)")) {
         ImGuiMCP::ImGui::Indent();
         for (std::size_t i = 0; i < names.size(); ++i) {
             ImGuiMCP::ImGui::PushID(static_cast<int>(i));
@@ -115,10 +123,11 @@ void MessagingProfilerUI::Render(State& s, const double warnMs, const double cri
                                     ImGuiMCP::ImGuiTableFlags_Resizable |
                                     ImGuiMCP::ImGuiTableFlags_Reorderable | ImGuiMCP::ImGuiTableFlags_Sortable |
                                     ImGuiMCP::ImGuiTableFlags_ScrollX | ImGuiMCP::ImGuiTableFlags_ScrollY)) {
+        const char* totalLabel = s.showSeconds ? "Total (s)" : "Total (ms)";
         ImGuiMCP::ImGui::TableSetupColumn(
             "Module", ImGuiMCP::ImGuiTableColumnFlags_DefaultSort | ImGuiMCP::ImGuiTableColumnFlags_WidthStretch);
         ImGuiMCP::ImGui::TableSetupColumn("Type", ImGuiMCP::ImGuiTableColumnFlags_PreferSortDescending);
-        ImGuiMCP::ImGui::TableSetupColumn("Total", ImGuiMCP::ImGuiTableColumnFlags_PreferSortDescending);
+        ImGuiMCP::ImGui::TableSetupColumn(totalLabel, ImGuiMCP::ImGuiTableColumnFlags_PreferSortDescending);
         for (const auto idx : active)
             ImGuiMCP::ImGui::TableSetupColumn(names[idx].data(),
                                               ImGuiMCP::ImGuiTableColumnFlags_PreferSortDescending);
@@ -175,6 +184,8 @@ void MessagingProfilerUI::Render(State& s, const double warnMs, const double cri
         for (const auto& e : enriched)
             if (e.isEsp) espExtra += e.total;
         const double grandTotal = totalsSum + espExtra;
+        const double displayScale = s.showSeconds ? 0.001 : 1.0;
+        const char* displayFmt = s.showSeconds ? "%.2f" : "%.0f";
         ImGuiMCP::ImGui::TableNextRow();
         ImGuiMCP::ImGui::TableSetColumnIndex(0);
         ImGuiMCP::ImGui::TextUnformatted("<Totals>");
@@ -183,13 +194,13 @@ void MessagingProfilerUI::Render(State& s, const double warnMs, const double cri
         ImGuiMCP::ImGui::TableSetColumnIndex(2);
         {
             ColorCell(grandTotal, warnMs, critMs);
-            ImGuiMCP::ImGui::Text("%.1f", grandTotal);
+            ImGuiMCP::ImGui::Text(displayFmt, grandTotal * displayScale);
         }
         for (std::size_t c = 0; c < active.size(); ++c) {
             ImGuiMCP::ImGui::TableSetColumnIndex(static_cast<int>(c + 3));
             const double v = colTotals[c];
             ColorCell(v, warnMs, critMs);
-            ImGuiMCP::ImGui::Text("%.1f", v);
+            ImGuiMCP::ImGui::Text(displayFmt, v * displayScale);
         }
         for (auto& e : enriched) {
             ImGuiMCP::ImGui::TableNextRow();
@@ -217,13 +228,13 @@ void MessagingProfilerUI::Render(State& s, const double warnMs, const double cri
             ImGuiMCP::ImGui::TextUnformatted(e.typeStr.c_str());
             ImGuiMCP::ImGui::TableSetColumnIndex(2);
             ColorCell(e.total, warnMs, critMs);
-            ImGuiMCP::ImGui::Text("%.1f", e.total);
+            ImGuiMCP::ImGui::Text(displayFmt, e.total * displayScale);
             for (std::size_t c = 0; c < active.size(); ++c) {
                 ImGuiMCP::ImGui::TableSetColumnIndex(static_cast<int>(c + 3));
                 double v = (*e.vals)[active[c]];
                 if (v < 1.0 || e.isEsp) v = 0.0;
                 if (!e.isEsp) ColorCell(v, warnMs, critMs);
-                ImGuiMCP::ImGui::Text("%.1f", v);
+                ImGuiMCP::ImGui::Text(displayFmt, v * displayScale);
             }
         }
         ImGuiMCP::ImGui::EndTable();

@@ -6,6 +6,7 @@ namespace MessagingProfilerUI {
         int sortColumn = 0;
         bool sortAsc = true;
         bool initializedFromDisk = false;
+        bool showSeconds = false;
     };
 
     struct DllMeta {
