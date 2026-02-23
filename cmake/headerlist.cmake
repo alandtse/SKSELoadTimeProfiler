@@ -5,6 +5,7 @@ set(headers ${headers}
 	include/Hooks.h
 	include/MCP.h
 	include/MessagingProfilerUI.h
+	include/Localization.h
 	include/Logger.h
 	include/MessagingProfiler.h
 )

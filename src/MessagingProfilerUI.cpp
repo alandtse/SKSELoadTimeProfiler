@@ -1,10 +1,11 @@
 #include "MessagingProfilerUI.h"
 #include "MCP.h"
-#include <SKSEMCP/SKSEMenuFramework.hpp>
 #include "MessagingProfiler.h"
 #include "Hooks.h"
 #include "Settings.h"
 #include "Utils.h"
+#include "Localization.h"
+#include <fmt/printf.h>
 
 
 bool MessagingProfilerUI::QueryVersionString(const wchar_t* path, const wchar_t* key, std::wstring& out) {
@@ -58,9 +59,19 @@ MessagingProfilerUI::DllMeta MessagingProfilerUI::GetDllMeta(const std::string& 
 }
 
 namespace {
+    template <class... Args>
+    std::string FormatLocalized(const std::string& format, Args&&... args) {
+        try {
+            return fmt::sprintf(format, std::forward<Args>(args)...);
+        } catch (const fmt::format_error& e) {
+            logger::warn("[Localization] Invalid format string '{}': {}", format, e.what());
+            return {};
+        }
+    }
+
     struct RowWrap {
         std::string module;
-        const char* typeStr;
+        std::string_view typeStr;
         double total;
         const std::array<double, SKSE::MessagingInterface::kTotal>* vals;
         bool isEsp;
@@ -89,21 +100,12 @@ namespace {
         return false;
     }
 
-    std::string_view GetMessageTypeTooltip(const std::string_view name) {
-        if (name == "PostLoad") return "Sent after SKSE loads plugins.";
-        if (name == "PostPostLoad") return "Sent after all plugins finish PostLoad.";
-        if (name == "PreLoadGame") return "Before a game is loaded.";
-        if (name == "PostLoadGame") return "After a game finishes loading.";
-        if (name == "SaveGame") return "When the game is saved.";
-        if (name == "DeleteGame") return "When a save is deleted.";
-        if (name == "InputLoaded") return "After input system is initialized.";
-        if (name == "NewGame") return "When starting a new game.";
-        if (name == "DataLoaded") return "After data and plugins are loaded.";
-        return {};
+    std::string_view GetMessageTypeTooltip(const std::size_t index) {
+        return Localization::MessageTypeTooltip(index);
     }
 
     void RenderSummary(const MessagingProfilerUI::State& s) {
-        ImGuiMCP::ImGui::TextUnformatted("Summary");
+        ImGuiMCP::ImGui::TextUnformatted(Localization::Summary.c_str());
         const auto taggedRows = MessagingProfiler::GetTaggedRows();
         double totalEspMs = 0.0;
         double totalDllMs = 0.0;
@@ -126,33 +128,35 @@ namespace {
                                         ImGuiMCP::ImGuiTableFlags_BordersInnerV)) {
             ImGuiMCP::ImGui::TableNextRow();
             ImGuiMCP::ImGui::TableSetColumnIndex(0);
-            ImGuiMCP::ImGui::TextUnformatted("SKSE init time (heuristic)");
+            ImGuiMCP::ImGui::TextUnformatted(Localization::SkseInitTimeHeuristic.c_str());
             ImGuiMCP::ImGui::TableSetColumnIndex(1);
             if (loadMs >= 0.0) {
                 if (s.showSeconds) {
-                    ImGuiMCP::ImGui::Text("%.2f s", loadMs * 0.001);
+                    const auto text = FormatLocalized(Localization::FormatSeconds, loadMs * 0.001);
+                    ImGuiMCP::ImGui::TextUnformatted(text.c_str());
                 } else {
-                    ImGuiMCP::ImGui::Text("%.3f ms", loadMs);
+                    const auto text = FormatLocalized(Localization::FormatMilliseconds, loadMs);
+                    ImGuiMCP::ImGui::TextUnformatted(text.c_str());
                 }
             } else {
-                ImGuiMCP::ImGui::TextUnformatted("-");
+                ImGuiMCP::ImGui::TextUnformatted(Localization::PlaceholderEmpty.c_str());
             }
 
             ImGuiMCP::ImGui::TableNextRow();
             ImGuiMCP::ImGui::TableSetColumnIndex(0);
-            ImGuiMCP::ImGui::TextUnformatted("Total DLL time");
+            ImGuiMCP::ImGui::TextUnformatted(Localization::TotalDllTime.c_str());
             ImGuiMCP::ImGui::TableSetColumnIndex(1);
             ImGuiMCP::ImGui::Text(displayFmt, totalDllMs * displayScale);
 
             ImGuiMCP::ImGui::TableNextRow();
             ImGuiMCP::ImGui::TableSetColumnIndex(0);
-            ImGuiMCP::ImGui::TextUnformatted("Total ESP time");
+            ImGuiMCP::ImGui::TextUnformatted(Localization::TotalEspTime.c_str());
             ImGuiMCP::ImGui::TableSetColumnIndex(1);
             ImGuiMCP::ImGui::Text(displayFmt, totalEspMs * displayScale);
 
             ImGuiMCP::ImGui::TableNextRow();
             ImGuiMCP::ImGui::TableSetColumnIndex(0);
-            ImGuiMCP::ImGui::TextUnformatted("Total time");
+            ImGuiMCP::ImGui::TextUnformatted(Localization::TotalTime.c_str());
             ImGuiMCP::ImGui::TableSetColumnIndex(1);
             ImGuiMCP::ImGui::Text(displayFmt, totalAllMs * displayScale);
 
@@ -160,29 +164,33 @@ namespace {
             const auto currentEsp = ESPProfiling::GetCurrentLoading();
             ImGuiMCP::ImGui::TableNextRow();
             ImGuiMCP::ImGui::TableSetColumnIndex(0);
-            ImGuiMCP::ImGui::TextUnformatted("Currently loading DLL");
+            ImGuiMCP::ImGui::TextUnformatted(Localization::CurrentlyLoadingDll.c_str());
             ImGuiMCP::ImGui::TableSetColumnIndex(1);
-            ImGuiMCP::ImGui::TextUnformatted(currentDll.empty() ? "-" : currentDll.c_str());
+            ImGuiMCP::ImGui::TextUnformatted(currentDll.empty() ? Localization::PlaceholderEmpty.c_str()
+                                                                : currentDll.c_str());
 
             ImGuiMCP::ImGui::TableNextRow();
             ImGuiMCP::ImGui::TableSetColumnIndex(0);
-            ImGuiMCP::ImGui::TextUnformatted("Currently loading ESP");
+            ImGuiMCP::ImGui::TextUnformatted(Localization::CurrentlyLoadingEsp.c_str());
             ImGuiMCP::ImGui::TableSetColumnIndex(1);
-            ImGuiMCP::ImGui::TextUnformatted(currentEsp.empty() ? "-" : currentEsp.c_str());
+            ImGuiMCP::ImGui::TextUnformatted(currentEsp.empty() ? Localization::PlaceholderEmpty.c_str()
+                                                                : currentEsp.c_str());
             ImGuiMCP::ImGui::EndTable();
         }
     }
 
     void RenderMessageTypeSelector(MessagingProfilerUI::State& s, const std::vector<std::string_view>& names) {
         ImGuiMCP::ImGui::AlignTextToFramePadding();
-        ImGuiMCP::ImGui::TextUnformatted("Selection");
+        ImGuiMCP::ImGui::TextUnformatted(Localization::Selection.c_str());
         ImGuiMCP::ImGui::SameLine();
-        if (ImGuiMCP::ImGui::Button("All")) {
+        const auto allLabel = Localization::MakeLabel(Localization::ButtonAll, "all");
+        if (ImGuiMCP::ImGui::Button(allLabel.c_str())) {
             std::ranges::fill(s.selected, true);
             Settings::Save();
         }
         ImGuiMCP::ImGui::SameLine();
-        if (ImGuiMCP::ImGui::Button("None")) {
+        const auto noneLabel = Localization::MakeLabel(Localization::ButtonNone, "none");
+        if (ImGuiMCP::ImGui::Button(noneLabel.c_str())) {
             std::ranges::fill(s.selected, false);
             Settings::Save();
         }
@@ -197,11 +205,12 @@ namespace {
                 ImGuiMCP::ImGui::TableNextColumn();
                 ImGuiMCP::ImGui::PushID(static_cast<int>(i));
                 bool sel = s.selected[i];
-                if (ImGuiMCP::ImGui::Checkbox(names[i].data(), &sel)) {
+                const auto& label = Localization::MessageTypeLabel(i);
+                if (ImGuiMCP::ImGui::Checkbox(label.c_str(), &sel)) {
                     s.selected[i] = sel;
                     Settings::Save();
                 }
-                const auto tooltip = GetMessageTypeTooltip(names[i]);
+                const auto tooltip = GetMessageTypeTooltip(i);
                 if (!tooltip.empty() && ImGuiMCP::ImGui::IsItemHovered()) {
                     ImGuiMCP::ImGui::BeginTooltip();
                     ImGuiMCP::ImGui::TextUnformatted(tooltip.data(), tooltip.data() + tooltip.size());
@@ -215,28 +224,33 @@ namespace {
 
     void RenderControls(MessagingProfilerUI::State& s, const std::vector<std::string_view>& names, double& warnMs,
                         double& critMs) {
-        if (ImGuiMCP::ImGui::CollapsingHeader("Display")) {
-            const bool saveRequested = ImGuiMCP::ImGui::Button("Save Settings");
-            ImGuiMCP::ImGui::Checkbox("Show in seconds", &s.showSeconds);
+        const auto displayLabel = Localization::MakeLabel(Localization::HeaderDisplay, "display");
+        if (ImGuiMCP::ImGui::CollapsingHeader(displayLabel.c_str())) {
+            const auto saveLabel = Localization::MakeLabel(Localization::ButtonSaveSettings, "save-settings");
+            const bool saveRequested = ImGuiMCP::ImGui::Button(saveLabel.c_str());
+            const auto secondsLabel = Localization::MakeLabel(Localization::CheckShowInSeconds, "show-seconds");
+            ImGuiMCP::ImGui::Checkbox(secondsLabel.c_str(), &s.showSeconds);
             ImGuiMCP::ImGui::SameLine();
-            HelpMarker("(?)", "Otherwise ms.");
+            HelpMarker(Localization::HelpMarkerLabel.c_str(), Localization::HelpMarkerSeconds.c_str());
             ImGuiMCP::ImGui::Spacing();
 
             bool thresholdsDirty = false;
-            ImGuiMCP::ImGui::TextUnformatted("Thresholds");
+            ImGuiMCP::ImGui::TextUnformatted(Localization::Thresholds.c_str());
             ImGuiMCP::ImGui::SameLine();
-            HelpMarker("(?)", "Warn/Crit control highlight colors for longer durations.");
+            HelpMarker(Localization::HelpMarkerLabel.c_str(), Localization::HelpMarkerThresholds.c_str());
             ImGuiMCP::ImGui::PushID("prof-thresholds");
             ImGuiMCP::ImGui::SetNextItemWidth(140);
             float warn = static_cast<float>(warnMs);
-            if (ImGuiMCP::ImGui::DragFloat("Warn (ms)", &warn, 10.f, 0.f, 10000.f, "%.0f")) {
+            const auto warnLabel = Localization::MakeLabel(Localization::WarnMs, "warn-ms");
+            if (ImGuiMCP::ImGui::DragFloat(warnLabel.c_str(), &warn, 10.f, 0.f, 10000.f, "%.0f")) {
                 warnMs = warn;
                 thresholdsDirty = true;
             }
             ImGuiMCP::ImGui::SameLine();
             ImGuiMCP::ImGui::SetNextItemWidth(140);
             float crit = static_cast<float>(critMs);
-            if (ImGuiMCP::ImGui::DragFloat("Crit (ms)", &crit, 10.f, 0.f, 20000.f, "%.0f")) {
+            const auto critLabel = Localization::MakeLabel(Localization::CritMs, "crit-ms");
+            if (ImGuiMCP::ImGui::DragFloat(critLabel.c_str(), &crit, 10.f, 0.f, 20000.f, "%.0f")) {
                 critMs = crit;
                 thresholdsDirty = true;
             }
@@ -246,7 +260,8 @@ namespace {
             ImGuiMCP::ImGui::Spacing();
         }
 
-        if (ImGuiMCP::ImGui::CollapsingHeader("Message Types")) {
+        const auto messageTypesLabel = Localization::MakeLabel(Localization::HeaderMessageTypes, "message-types");
+        if (ImGuiMCP::ImGui::CollapsingHeader(messageTypesLabel.c_str())) {
             RenderMessageTypeSelector(s, names);
         }
     }
@@ -283,9 +298,12 @@ namespace {
                     sum += v;
                 }
             }
-            result.rows.push_back(
-            {r.module, r.kind == MessagingProfiler::SourceKind::ESP ? "ESP" : "DLL", sum, &r.perMsg,
-             r.kind == MessagingProfiler::SourceKind::ESP});
+            result.rows.push_back({r.module,
+                                   r.kind == MessagingProfiler::SourceKind::ESP ? Localization::TypeEsp
+                                                                               : Localization::TypeDll,
+                                   sum,
+                                   &r.perMsg,
+                                   r.kind == MessagingProfiler::SourceKind::ESP});
         }
 
         std::ranges::sort(result.rows, [&](const RowWrap& A, const RowWrap& B) {
@@ -312,16 +330,20 @@ namespace {
         ImGuiMCP::ImGui::Separator();
         ImGuiMCP::ImGui::Spacing();
         ImGuiMCP::ImGui::SetNextItemWidth(260.0f);
-        ImGuiMCP::ImGui::InputTextWithHint("Search", "Filter by module...", s.search.data(), s.search.size());
+        const auto searchLabel = Localization::MakeLabel(Localization::SearchLabel, "search");
+        ImGuiMCP::ImGui::InputTextWithHint(searchLabel.c_str(), Localization::SearchHint.c_str(), s.search.data(),
+                                           s.search.size());
         ImGuiMCP::ImGui::SameLine();
         bool dll = showDllEntries;
-        if (ImGuiMCP::ImGui::Checkbox("DLL", &dll)) {
+        const auto dllLabel = Localization::MakeLabel(Localization::FilterDll, "filter-dll");
+        if (ImGuiMCP::ImGui::Checkbox(dllLabel.c_str(), &dll)) {
             showDllEntries = dll;
             Settings::Save();
         }
         ImGuiMCP::ImGui::SameLine();
         bool esp = showEspEntries;
-        if (ImGuiMCP::ImGui::Checkbox("ESP", &esp)) {
+        const auto espLabel = Localization::MakeLabel(Localization::FilterEsp, "filter-esp");
+        if (ImGuiMCP::ImGui::Checkbox(espLabel.c_str(), &esp)) {
             showEspEntries = esp;
             Settings::Save();
         }
@@ -335,7 +357,7 @@ namespace {
         ImGuiMCP::ImGui::BeginChild("##msgprof-results", ImGuiMCP::ImVec2(0.0f, childHeight), true);
         const auto active = BuildActiveSelections(s);
         if (active.empty()) {
-            ImGuiMCP::ImGui::TextUnformatted("No message types selected.");
+            ImGuiMCP::ImGui::TextUnformatted(Localization::NoMessageTypesSelected.c_str());
             ImGuiMCP::ImGui::EndChild();
             return;
         }
@@ -352,15 +374,22 @@ namespace {
                                         ImGuiMCP::ImGuiTableFlags_Sortable |
                                         ImGuiMCP::ImGuiTableFlags_ScrollX |
                                         ImGuiMCP::ImGuiTableFlags_ScrollY)) {
-            const char* totalLabel = s.showSeconds ? "Total (s)" : "Total (ms)";
+            const auto& totalLabel = s.showSeconds ? Localization::TotalSecondsLabel
+                                                   : Localization::TotalMillisecondsLabel;
+            const auto moduleLabel = Localization::MakeLabel(Localization::ColumnModule, "module");
+            const auto typeLabel = Localization::MakeLabel(Localization::ColumnType, "type");
+            const auto totalHeader = Localization::MakeLabel(totalLabel, "total");
             ImGuiMCP::ImGui::TableSetupColumn(
-                "Module",
+                moduleLabel.c_str(),
                 ImGuiMCP::ImGuiTableColumnFlags_DefaultSort | ImGuiMCP::ImGuiTableColumnFlags_WidthStretch);
-            ImGuiMCP::ImGui::TableSetupColumn("Type", ImGuiMCP::ImGuiTableColumnFlags_PreferSortDescending);
-            ImGuiMCP::ImGui::TableSetupColumn(totalLabel, ImGuiMCP::ImGuiTableColumnFlags_PreferSortDescending);
-            for (const auto idx : active)
-                ImGuiMCP::ImGui::TableSetupColumn(names[idx].data(),
+            ImGuiMCP::ImGui::TableSetupColumn(typeLabel.c_str(), ImGuiMCP::ImGuiTableColumnFlags_PreferSortDescending);
+            ImGuiMCP::ImGui::TableSetupColumn(totalHeader.c_str(), ImGuiMCP::ImGuiTableColumnFlags_PreferSortDescending);
+            for (const auto idx : active) {
+                const auto& visible = Localization::MessageTypeLabel(idx);
+                const auto colLabel = Localization::MakeLabel(visible, names[idx].data());
+                ImGuiMCP::ImGui::TableSetupColumn(colLabel.c_str(),
                                                   ImGuiMCP::ImGuiTableColumnFlags_PreferSortDescending);
+            }
             ImGuiMCP::ImGui::TableHeadersRow();
             if (const ImGuiMCP::ImGuiTableSortSpecs* sortSpecs = ImGuiMCP::ImGui::TableGetSortSpecs())
                 if (sortSpecs->SpecsCount > 0) {
@@ -394,9 +423,9 @@ namespace {
                                  totalsBg ? totalsBg->z : 0.2f, totalsAlpha));
             ImGuiMCP::ImGui::TableSetBgColor(ImGuiMCP::ImGuiTableBgTarget_RowBg0, totalsColor);
             ImGuiMCP::ImGui::TableSetColumnIndex(0);
-            ImGuiMCP::ImGui::TextUnformatted("<Totals>");
+            ImGuiMCP::ImGui::TextUnformatted(Localization::TotalsRowLabel.c_str());
             ImGuiMCP::ImGui::TableSetColumnIndex(1);
-            ImGuiMCP::ImGui::TextUnformatted("-");
+            ImGuiMCP::ImGui::TextUnformatted(Localization::PlaceholderEmpty.c_str());
             ImGuiMCP::ImGui::TableSetColumnIndex(2);
             MessagingProfilerUI::ColorCell(grandTotal, warnMs, critMs);
             ImGuiMCP::ImGui::Text(displayFmt, grandTotal * displayScale);
@@ -425,20 +454,29 @@ namespace {
                             if (ImGuiMCP::ImGui::BeginTooltip()) {
                                 ImGuiMCP::ImGui::TextUnformatted(e.module.c_str());
                                 if (it->second.ok) {
-                                    if (!it->second.author.empty())
-                                        ImGuiMCP::ImGui::Text("Author: %s", it->second.author.c_str());
-                                    if (!it->second.version.empty())
-                                        ImGuiMCP::ImGui::Text("Version: %s", it->second.version.c_str());
-                                    if (!it->second.license.empty())
-                                        ImGuiMCP::ImGui::Text("License: %s", it->second.license.c_str());
+                                    if (!it->second.author.empty()) {
+                                        const auto text =
+                                            FormatLocalized(Localization::TooltipAuthor, it->second.author.c_str());
+                                        ImGuiMCP::ImGui::TextUnformatted(text.c_str());
+                                    }
+                                    if (!it->second.version.empty()) {
+                                        const auto text =
+                                            FormatLocalized(Localization::TooltipVersion, it->second.version.c_str());
+                                        ImGuiMCP::ImGui::TextUnformatted(text.c_str());
+                                    }
+                                    if (!it->second.license.empty()) {
+                                        const auto text =
+                                            FormatLocalized(Localization::TooltipLicense, it->second.license.c_str());
+                                        ImGuiMCP::ImGui::TextUnformatted(text.c_str());
+                                    }
                                 } else {
-                                    ImGuiMCP::ImGui::TextUnformatted("(no version info)");
+                                    ImGuiMCP::ImGui::TextUnformatted(Localization::TooltipNoVersionInfo.c_str());
                                 }
                                 ImGuiMCP::ImGui::EndTooltip();
                             }
                         }
                         ImGuiMCP::ImGui::TableSetColumnIndex(1);
-                        ImGuiMCP::ImGui::TextUnformatted(e.typeStr);
+                        ImGuiMCP::ImGui::TextUnformatted(e.typeStr.data(), e.typeStr.data() + e.typeStr.size());
                         ImGuiMCP::ImGui::TableSetColumnIndex(2);
                         MessagingProfilerUI::ColorCell(e.total, warnMs, critMs);
                         ImGuiMCP::ImGui::Text(displayFmt, e.total * displayScale);
@@ -458,8 +496,7 @@ namespace {
         ImGuiMCP::ImGui::EndChild();
 
         ImGuiMCP::ImGui::Spacing();
-        ImGuiMCP::ImGui::TextWrapped(
-            "Totals row sums visible per-module averages for selected message types. Threshold colors use warn/crit values. ESP rows only show total load time aggregated.");
+        ImGuiMCP::ImGui::TextWrapped(Localization::TotalsHelp.c_str());
     }
 }
 
