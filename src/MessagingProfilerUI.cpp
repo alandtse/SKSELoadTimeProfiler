@@ -2,7 +2,10 @@
 #include "MCP.h"
 #include <SKSEMCP/SKSEMenuFramework.hpp>
 #include "MessagingProfiler.h"
+#include "Hooks.h"
 #include "Settings.h"
+#include "Utils.h"
+
 
 bool MessagingProfilerUI::QueryVersionString(const wchar_t* path, const wchar_t* key, std::wstring& out) {
     DWORD handle = 0;
@@ -54,10 +57,416 @@ MessagingProfilerUI::DllMeta MessagingProfilerUI::GetDllMeta(const std::string& 
     return meta;
 }
 
-void MessagingProfilerUI::Render(State& s, const double warnMs, const double critMs) {
+namespace {
+    struct RowWrap {
+        std::string module;
+        const char* typeStr;
+        double total;
+        const std::array<double, SKSE::MessagingInterface::kTotal>* vals;
+        bool isEsp;
+    };
+
+    struct RenderRows {
+        std::vector<MessagingProfiler::TaggedRow> taggedRows;
+        std::vector<RowWrap> rows;
+    };
+
+    bool CaseInsensitiveContains(const std::string_view haystack, const std::string_view needle) {
+        if (needle.empty()) return true;
+        if (haystack.size() < needle.size()) return false;
+        for (std::size_t i = 0; i + needle.size() <= haystack.size(); ++i) {
+            bool match = true;
+            for (std::size_t j = 0; j < needle.size(); ++j) {
+                const auto hc = static_cast<unsigned char>(haystack[i + j]);
+                const auto nc = static_cast<unsigned char>(needle[j]);
+                if (static_cast<char>(std::tolower(hc)) != static_cast<char>(std::tolower(nc))) {
+                    match = false;
+                    break;
+                }
+            }
+            if (match) return true;
+        }
+        return false;
+    }
+
+    std::string_view GetMessageTypeTooltip(const std::string_view name) {
+        if (name == "PostLoad") return "Sent after SKSE loads plugins.";
+        if (name == "PostPostLoad") return "Sent after all plugins finish PostLoad.";
+        if (name == "PreLoadGame") return "Before a game is loaded.";
+        if (name == "PostLoadGame") return "After a game finishes loading.";
+        if (name == "SaveGame") return "When the game is saved.";
+        if (name == "DeleteGame") return "When a save is deleted.";
+        if (name == "InputLoaded") return "After input system is initialized.";
+        if (name == "NewGame") return "When starting a new game.";
+        if (name == "DataLoaded") return "After data and plugins are loaded.";
+        return {};
+    }
+
+    void RenderSummary(const MessagingProfilerUI::State& s) {
+        ImGuiMCP::ImGui::TextUnformatted("Summary");
+        const auto taggedRows = MessagingProfiler::GetTaggedRows();
+        double totalEspMs = 0.0;
+        double totalDllMs = 0.0;
+        for (const auto& row : taggedRows) {
+            if (row.kind == MessagingProfiler::SourceKind::ESP) {
+                totalEspMs += row.totalMs;
+            } else {
+                for (const double v : row.perMsg) {
+                    if (v >= 1.0) totalDllMs += v;
+                }
+            }
+        }
+        const double loadMs = MCP::loadTimeMs.load(std::memory_order_relaxed);
+        if (loadMs >= 0.0) totalDllMs += loadMs;
+        const double totalAllMs = totalDllMs + totalEspMs;
+        const double displayScale = s.showSeconds ? 0.001 : 1.0;
+        const char* displayFmt = s.showSeconds ? "%.2f" : "%.0f";
+        if (ImGuiMCP::ImGui::BeginTable("##prof-summary", 2,
+                                        ImGuiMCP::ImGuiTableFlags_SizingStretchProp |
+                                        ImGuiMCP::ImGuiTableFlags_BordersInnerV)) {
+            ImGuiMCP::ImGui::TableNextRow();
+            ImGuiMCP::ImGui::TableSetColumnIndex(0);
+            ImGuiMCP::ImGui::TextUnformatted("SKSE init time (heuristic)");
+            ImGuiMCP::ImGui::TableSetColumnIndex(1);
+            if (loadMs >= 0.0) {
+                if (s.showSeconds) {
+                    ImGuiMCP::ImGui::Text("%.2f s", loadMs * 0.001);
+                } else {
+                    ImGuiMCP::ImGui::Text("%.3f ms", loadMs);
+                }
+            } else {
+                ImGuiMCP::ImGui::TextUnformatted("-");
+            }
+
+            ImGuiMCP::ImGui::TableNextRow();
+            ImGuiMCP::ImGui::TableSetColumnIndex(0);
+            ImGuiMCP::ImGui::TextUnformatted("Total DLL time");
+            ImGuiMCP::ImGui::TableSetColumnIndex(1);
+            ImGuiMCP::ImGui::Text(displayFmt, totalDllMs * displayScale);
+
+            ImGuiMCP::ImGui::TableNextRow();
+            ImGuiMCP::ImGui::TableSetColumnIndex(0);
+            ImGuiMCP::ImGui::TextUnformatted("Total ESP time");
+            ImGuiMCP::ImGui::TableSetColumnIndex(1);
+            ImGuiMCP::ImGui::Text(displayFmt, totalEspMs * displayScale);
+
+            ImGuiMCP::ImGui::TableNextRow();
+            ImGuiMCP::ImGui::TableSetColumnIndex(0);
+            ImGuiMCP::ImGui::TextUnformatted("Total time");
+            ImGuiMCP::ImGui::TableSetColumnIndex(1);
+            ImGuiMCP::ImGui::Text(displayFmt, totalAllMs * displayScale);
+
+            const auto currentDll = MessagingProfiler::GetCurrentCallbackModule();
+            const auto currentEsp = ESPProfiling::GetCurrentLoading();
+            ImGuiMCP::ImGui::TableNextRow();
+            ImGuiMCP::ImGui::TableSetColumnIndex(0);
+            ImGuiMCP::ImGui::TextUnformatted("Currently loading DLL");
+            ImGuiMCP::ImGui::TableSetColumnIndex(1);
+            ImGuiMCP::ImGui::TextUnformatted(currentDll.empty() ? "-" : currentDll.c_str());
+
+            ImGuiMCP::ImGui::TableNextRow();
+            ImGuiMCP::ImGui::TableSetColumnIndex(0);
+            ImGuiMCP::ImGui::TextUnformatted("Currently loading ESP");
+            ImGuiMCP::ImGui::TableSetColumnIndex(1);
+            ImGuiMCP::ImGui::TextUnformatted(currentEsp.empty() ? "-" : currentEsp.c_str());
+            ImGuiMCP::ImGui::EndTable();
+        }
+    }
+
+    void RenderMessageTypeSelector(MessagingProfilerUI::State& s, const std::vector<std::string_view>& names) {
+        ImGuiMCP::ImGui::AlignTextToFramePadding();
+        ImGuiMCP::ImGui::TextUnformatted("Selection");
+        ImGuiMCP::ImGui::SameLine();
+        if (ImGuiMCP::ImGui::Button("All")) {
+            std::ranges::fill(s.selected, true);
+            Settings::Save();
+        }
+        ImGuiMCP::ImGui::SameLine();
+        if (ImGuiMCP::ImGui::Button("None")) {
+            std::ranges::fill(s.selected, false);
+            Settings::Save();
+        }
+
+        ImGuiMCP::ImGui::Spacing();
+        ImGuiMCP::ImVec2 avail{};
+        ImGuiMCP::ImGui::GetContentRegionAvail(&avail);
+        const int columns = (avail.x > 520.0f) ? 4 : 3;
+        if (ImGuiMCP::ImGui::BeginTable("##msgtypes-grid", columns,
+                                        ImGuiMCP::ImGuiTableFlags_SizingStretchSame)) {
+            for (std::size_t i = 0; i < names.size(); ++i) {
+                ImGuiMCP::ImGui::TableNextColumn();
+                ImGuiMCP::ImGui::PushID(static_cast<int>(i));
+                bool sel = s.selected[i];
+                if (ImGuiMCP::ImGui::Checkbox(names[i].data(), &sel)) {
+                    s.selected[i] = sel;
+                    Settings::Save();
+                }
+                const auto tooltip = GetMessageTypeTooltip(names[i]);
+                if (!tooltip.empty() && ImGuiMCP::ImGui::IsItemHovered()) {
+                    ImGuiMCP::ImGui::BeginTooltip();
+                    ImGuiMCP::ImGui::TextUnformatted(tooltip.data(), tooltip.data() + tooltip.size());
+                    ImGuiMCP::ImGui::EndTooltip();
+                }
+                ImGuiMCP::ImGui::PopID();
+            }
+            ImGuiMCP::ImGui::EndTable();
+        }
+    }
+
+    void RenderControls(MessagingProfilerUI::State& s, const std::vector<std::string_view>& names, double& warnMs,
+                        double& critMs) {
+        if (ImGuiMCP::ImGui::CollapsingHeader("Display")) {
+            const bool saveRequested = ImGuiMCP::ImGui::Button("Save Settings");
+            ImGuiMCP::ImGui::Checkbox("Show in seconds", &s.showSeconds);
+            ImGuiMCP::ImGui::SameLine();
+            HelpMarker("(?)", "Otherwise ms.");
+            ImGuiMCP::ImGui::Spacing();
+
+            bool thresholdsDirty = false;
+            ImGuiMCP::ImGui::TextUnformatted("Thresholds");
+            ImGuiMCP::ImGui::SameLine();
+            HelpMarker("(?)", "Warn/Crit control highlight colors for longer durations.");
+            ImGuiMCP::ImGui::PushID("prof-thresholds");
+            ImGuiMCP::ImGui::SetNextItemWidth(140);
+            float warn = static_cast<float>(warnMs);
+            if (ImGuiMCP::ImGui::DragFloat("Warn (ms)", &warn, 10.f, 0.f, 10000.f, "%.0f")) {
+                warnMs = warn;
+                thresholdsDirty = true;
+            }
+            ImGuiMCP::ImGui::SameLine();
+            ImGuiMCP::ImGui::SetNextItemWidth(140);
+            float crit = static_cast<float>(critMs);
+            if (ImGuiMCP::ImGui::DragFloat("Crit (ms)", &crit, 10.f, 0.f, 20000.f, "%.0f")) {
+                critMs = crit;
+                thresholdsDirty = true;
+            }
+            ImGuiMCP::ImGui::PopID();
+            if (saveRequested || thresholdsDirty) Settings::Save();
+
+            ImGuiMCP::ImGui::Spacing();
+        }
+
+        if (ImGuiMCP::ImGui::CollapsingHeader("Message Types")) {
+            RenderMessageTypeSelector(s, names);
+        }
+    }
+
+    std::vector<std::size_t> BuildActiveSelections(const MessagingProfilerUI::State& s) {
+        std::vector<std::size_t> active;
+        active.reserve(s.selected.size());
+        for (std::size_t i = 0; i < s.selected.size(); ++i)
+            if (s.selected[i]) active.push_back(i);
+        return active;
+    }
+
+    RenderRows BuildEnrichedRows(const MessagingProfilerUI::State& s, const std::vector<std::size_t>& active,
+                                 const std::string_view filter, const bool showDllEntries, const bool showEspEntries) {
+        RenderRows result;
+        result.taggedRows = MessagingProfiler::GetTaggedRows();
+
+        std::erase_if(result.taggedRows, [&](const MessagingProfiler::TaggedRow& r) {
+            if (r.kind == MessagingProfiler::SourceKind::DLL && !showDllEntries) return true;
+            if (r.kind == MessagingProfiler::SourceKind::ESP && !showEspEntries) return true;
+            return false;
+        });
+
+        result.rows.reserve(result.taggedRows.size());
+        for (auto& r : result.taggedRows) {
+            if (!filter.empty() && !CaseInsensitiveContains(r.module, filter)) continue;
+            double sum = 0.0;
+            if (r.kind == MessagingProfiler::SourceKind::ESP) {
+                sum = r.totalMs;
+            } else {
+                for (const auto idx : active) {
+                    double v = r.perMsg[idx];
+                    if (v < 1.0) v = 0.0;
+                    sum += v;
+                }
+            }
+            result.rows.push_back(
+            {r.module, r.kind == MessagingProfiler::SourceKind::ESP ? "ESP" : "DLL", sum, &r.perMsg,
+             r.kind == MessagingProfiler::SourceKind::ESP});
+        }
+
+        std::ranges::sort(result.rows, [&](const RowWrap& A, const RowWrap& B) {
+            if (s.sortColumn == 0) return s.sortAsc ? A.module < B.module : A.module > B.module;
+            if (s.sortColumn == 1)
+                return s.sortAsc
+                           ? std::string_view(A.typeStr) < std::string_view(B.typeStr)
+                           : std::string_view(A.typeStr) > std::string_view(B.typeStr);
+            if (s.sortColumn == 2) return s.sortAsc ? A.total < B.total : A.total > B.total;
+            const std::size_t msgIdx = active[s.sortColumn - 3];
+            double av = (*A.vals)[msgIdx];
+            if (av < 1.0 || A.isEsp) av = 0.0;
+            double bv = (*B.vals)[msgIdx];
+            if (bv < 1.0 || B.isEsp) bv = 0.0;
+            return s.sortAsc ? av < bv : av > bv;
+        });
+
+        return result;
+    }
+
+    void RenderResultsTable(MessagingProfilerUI::State& s, const std::vector<std::string_view>& names,
+                            const double warnMs,
+                            const double critMs, bool& showDllEntries, bool& showEspEntries) {
+        ImGuiMCP::ImGui::Separator();
+        ImGuiMCP::ImGui::Spacing();
+        ImGuiMCP::ImGui::SetNextItemWidth(260.0f);
+        ImGuiMCP::ImGui::InputTextWithHint("Search", "Filter by module...", s.search.data(), s.search.size());
+        ImGuiMCP::ImGui::SameLine();
+        bool dll = showDllEntries;
+        if (ImGuiMCP::ImGui::Checkbox("DLL", &dll)) {
+            showDllEntries = dll;
+            Settings::Save();
+        }
+        ImGuiMCP::ImGui::SameLine();
+        bool esp = showEspEntries;
+        if (ImGuiMCP::ImGui::Checkbox("ESP", &esp)) {
+            showEspEntries = esp;
+            Settings::Save();
+        }
+        ImGuiMCP::ImGui::Spacing();
+
+        ImGuiMCP::ImVec2 avail{};
+        ImGuiMCP::ImGui::GetContentRegionAvail(&avail);
+        float childHeight = avail.y * 0.9f;
+        if (childHeight < 200.0f) childHeight = avail.y;
+
+        ImGuiMCP::ImGui::BeginChild("##msgprof-results", ImGuiMCP::ImVec2(0.0f, childHeight), true);
+        const auto active = BuildActiveSelections(s);
+        if (active.empty()) {
+            ImGuiMCP::ImGui::TextUnformatted("No message types selected.");
+            ImGuiMCP::ImGui::EndChild();
+            return;
+        }
+
+        std::string_view filter = s.search.data();
+        if (!filter.empty()) {
+            filter = std::string_view(s.search.data(), std::strlen(s.search.data()));
+        }
+
+        if (ImGuiMCP::ImGui::BeginTable("##msgprof2", static_cast<int>(active.size()) + 3,
+                                        ImGuiMCP::ImGuiTableFlags_RowBg | ImGuiMCP::ImGuiTableFlags_Borders |
+                                        ImGuiMCP::ImGuiTableFlags_Resizable |
+                                        ImGuiMCP::ImGuiTableFlags_Reorderable |
+                                        ImGuiMCP::ImGuiTableFlags_Sortable |
+                                        ImGuiMCP::ImGuiTableFlags_ScrollX |
+                                        ImGuiMCP::ImGuiTableFlags_ScrollY)) {
+            const char* totalLabel = s.showSeconds ? "Total (s)" : "Total (ms)";
+            ImGuiMCP::ImGui::TableSetupColumn(
+                "Module",
+                ImGuiMCP::ImGuiTableColumnFlags_DefaultSort | ImGuiMCP::ImGuiTableColumnFlags_WidthStretch);
+            ImGuiMCP::ImGui::TableSetupColumn("Type", ImGuiMCP::ImGuiTableColumnFlags_PreferSortDescending);
+            ImGuiMCP::ImGui::TableSetupColumn(totalLabel, ImGuiMCP::ImGuiTableColumnFlags_PreferSortDescending);
+            for (const auto idx : active)
+                ImGuiMCP::ImGui::TableSetupColumn(names[idx].data(),
+                                                  ImGuiMCP::ImGuiTableColumnFlags_PreferSortDescending);
+            ImGuiMCP::ImGui::TableHeadersRow();
+            if (const ImGuiMCP::ImGuiTableSortSpecs* sortSpecs = ImGuiMCP::ImGui::TableGetSortSpecs())
+                if (sortSpecs->SpecsCount > 0) {
+                    s.sortColumn = sortSpecs->Specs[0].ColumnIndex;
+                    s.sortAsc = sortSpecs->Specs[0].SortDirection == ImGuiMCP::ImGuiSortDirection_Ascending;
+                }
+
+            auto renderRows = BuildEnrichedRows(s, active, filter, showDllEntries, showEspEntries);
+            std::vector colTotals(active.size(), 0.0);
+            for (const auto& e : renderRows.rows)
+                for (std::size_t c = 0; c < active.size(); ++c) {
+                    double v = (*e.vals)[active[c]];
+                    if (e.isEsp || v < 1.0) v = 0.0;
+                    colTotals[c] += v;
+                }
+            double totalsSum = 0.0;
+            for (const double v : colTotals) totalsSum += v;
+            double espExtra = 0.0;
+            for (const auto& e : renderRows.rows)
+                if (e.isEsp) espExtra += e.total;
+            const double grandTotal = totalsSum + espExtra;
+            const double displayScale = s.showSeconds ? 0.001 : 1.0;
+            const char* displayFmt = s.showSeconds ? "%.2f" : "%.0f";
+
+            ImGuiMCP::ImGui::TableNextRow();
+            const auto* totalsBg = ImGuiMCP::ImGui::GetStyleColorVec4(ImGuiMCP::ImGuiCol_TableRowBgAlt);
+            float totalsAlpha = totalsBg ? totalsBg->w + 0.15f : 0.35f;
+            totalsAlpha = std::min(totalsAlpha, 0.6f);
+            const auto totalsColor = ImGuiMCP::ImGui::GetColorU32(
+                ImGuiMCP::ImVec4(totalsBg ? totalsBg->x : 0.2f, totalsBg ? totalsBg->y : 0.2f,
+                                 totalsBg ? totalsBg->z : 0.2f, totalsAlpha));
+            ImGuiMCP::ImGui::TableSetBgColor(ImGuiMCP::ImGuiTableBgTarget_RowBg0, totalsColor);
+            ImGuiMCP::ImGui::TableSetColumnIndex(0);
+            ImGuiMCP::ImGui::TextUnformatted("<Totals>");
+            ImGuiMCP::ImGui::TableSetColumnIndex(1);
+            ImGuiMCP::ImGui::TextUnformatted("-");
+            ImGuiMCP::ImGui::TableSetColumnIndex(2);
+            MessagingProfilerUI::ColorCell(grandTotal, warnMs, critMs);
+            ImGuiMCP::ImGui::Text(displayFmt, grandTotal * displayScale);
+            for (std::size_t c = 0; c < active.size(); ++c) {
+                ImGuiMCP::ImGui::TableSetColumnIndex(static_cast<int>(c + 3));
+                const double v = colTotals[c];
+                MessagingProfilerUI::ColorCell(v, warnMs, critMs);
+                ImGuiMCP::ImGui::Text(displayFmt, v * displayScale);
+            }
+
+            static auto* clipper = ImGuiMCP::ImGui::ImGuiListClipperManager::Create();
+            if (clipper) {
+                ImGuiMCP::ImGui::ImGuiListClipperManager::Begin(
+                    clipper, static_cast<int>(renderRows.rows.size()), 0.0f);
+                while (ImGuiMCP::ImGui::ImGuiListClipperManager::Step(clipper)) {
+                    for (int i = clipper->DisplayStart; i < clipper->DisplayEnd; ++i) {
+                        auto& e = renderRows.rows[static_cast<std::size_t>(i)];
+                        ImGuiMCP::ImGui::TableNextRow();
+                        ImGuiMCP::ImGui::TableSetColumnIndex(0);
+                        ImGuiMCP::ImGui::TextUnformatted(e.module.c_str());
+                        if (!e.isEsp && ImGuiMCP::ImGui::IsItemHovered()) {
+                            auto it = MessagingProfilerUI::g_metaCache.find(e.module);
+                            if (it == MessagingProfilerUI::g_metaCache.end())
+                                it = MessagingProfilerUI::g_metaCache.emplace(
+                                    e.module, MessagingProfilerUI::GetDllMeta(e.module)).first;
+                            if (ImGuiMCP::ImGui::BeginTooltip()) {
+                                ImGuiMCP::ImGui::TextUnformatted(e.module.c_str());
+                                if (it->second.ok) {
+                                    if (!it->second.author.empty())
+                                        ImGuiMCP::ImGui::Text("Author: %s", it->second.author.c_str());
+                                    if (!it->second.version.empty())
+                                        ImGuiMCP::ImGui::Text("Version: %s", it->second.version.c_str());
+                                    if (!it->second.license.empty())
+                                        ImGuiMCP::ImGui::Text("License: %s", it->second.license.c_str());
+                                } else {
+                                    ImGuiMCP::ImGui::TextUnformatted("(no version info)");
+                                }
+                                ImGuiMCP::ImGui::EndTooltip();
+                            }
+                        }
+                        ImGuiMCP::ImGui::TableSetColumnIndex(1);
+                        ImGuiMCP::ImGui::TextUnformatted(e.typeStr);
+                        ImGuiMCP::ImGui::TableSetColumnIndex(2);
+                        MessagingProfilerUI::ColorCell(e.total, warnMs, critMs);
+                        ImGuiMCP::ImGui::Text(displayFmt, e.total * displayScale);
+                        for (std::size_t c = 0; c < active.size(); ++c) {
+                            ImGuiMCP::ImGui::TableSetColumnIndex(static_cast<int>(c + 3));
+                            double v = (*e.vals)[active[c]];
+                            if (v < 1.0 || e.isEsp) v = 0.0;
+                            if (!e.isEsp) MessagingProfilerUI::ColorCell(v, warnMs, critMs);
+                            ImGuiMCP::ImGui::Text(displayFmt, v * displayScale);
+                        }
+                    }
+                }
+                ImGuiMCP::ImGui::ImGuiListClipperManager::End(clipper);
+            }
+            ImGuiMCP::ImGui::EndTable();
+        }
+        ImGuiMCP::ImGui::EndChild();
+
+        ImGuiMCP::ImGui::Spacing();
+        ImGuiMCP::ImGui::TextWrapped(
+            "Totals row sums visible per-module averages for selected message types. Threshold colors use warn/crit values. ESP rows only show total load time aggregated.");
+    }
+}
+
+void MessagingProfilerUI::Render(State& s, double& warnMs, double& critMs, bool& showDllEntries, bool& showEspEntries) {
     const auto names = MessagingProfiler::GetMessageTypeNames();
     EnsureSelectionSize(s, names.size());
-    // If not initialized from disk and first frame (all true already), ensure default all true explicitly.
+
     if (!s.initializedFromDisk && !s.selected.empty()) {
         bool any = false;
         for (const bool b : s.selected) {
@@ -69,172 +478,17 @@ void MessagingProfilerUI::Render(State& s, const double warnMs, const double cri
         if (!any) std::ranges::fill(s.selected, true);
     }
 
-    auto taggedRows = MessagingProfiler::GetTaggedRows();
-
-    if (ImGuiMCP::ImGui::CollapsingHeader("Message Types")) {
-        ImGuiMCP::ImGui::Indent();
-        for (std::size_t i = 0; i < names.size(); ++i) {
-            ImGuiMCP::ImGui::PushID(static_cast<int>(i));
-            bool sel = s.selected[i];
-            if (ImGuiMCP::ImGui::Checkbox(names[i].data(), &sel)) {
-                s.selected[i] = sel;
-                LogSettings::Save();
-            }
-            ImGuiMCP::ImGui::PopID();
-            if ((i % 4) != 3) ImGuiMCP::ImGui::SameLine();
-        }
-        if (ImGuiMCP::ImGui::Button("All")) {
-            std::ranges::fill(s.selected, true);
-            LogSettings::Save();
-        }
-        ImGuiMCP::ImGui::SameLine();
-        if (ImGuiMCP::ImGui::Button("None")) {
-            std::ranges::fill(s.selected, false);
-            LogSettings::Save();
-        }
-        ImGuiMCP::ImGui::Unindent();
-    }
-
-    std::vector<std::size_t> active;
-    for (std::size_t i = 0; i < s.selected.size(); ++i)
-        if (s.selected[i]) active.push_back(i);
-    if (active.empty()) {
-        ImGuiMCP::ImGui::TextUnformatted("No message types selected.");
-        return;
-    }
-
-    // Apply source filters from MCP
-    std::erase_if(taggedRows, [](const MessagingProfiler::TaggedRow& r) {
-        if (r.kind == MessagingProfiler::SourceKind::DLL && !MCP::showDllEntries) return true;
-        if (r.kind == MessagingProfiler::SourceKind::ESP && !MCP::showEspEntries) return true;
-        return false;
-    });
-
-    if (ImGuiMCP::ImGui::BeginTable("##msgprof2", static_cast<int>(active.size()) + 3,
-                                    ImGuiMCP::ImGuiTableFlags_RowBg | ImGuiMCP::ImGuiTableFlags_Borders |
-                                    ImGuiMCP::ImGuiTableFlags_Resizable |
-                                    ImGuiMCP::ImGuiTableFlags_Reorderable | ImGuiMCP::ImGuiTableFlags_Sortable |
-                                    ImGuiMCP::ImGuiTableFlags_ScrollX | ImGuiMCP::ImGuiTableFlags_ScrollY)) {
-        ImGuiMCP::ImGui::TableSetupColumn(
-            "Module", ImGuiMCP::ImGuiTableColumnFlags_DefaultSort | ImGuiMCP::ImGuiTableColumnFlags_WidthStretch);
-        ImGuiMCP::ImGui::TableSetupColumn("Type", ImGuiMCP::ImGuiTableColumnFlags_PreferSortDescending);
-        ImGuiMCP::ImGui::TableSetupColumn("Total", ImGuiMCP::ImGuiTableColumnFlags_PreferSortDescending);
-        for (const auto idx : active)
-            ImGuiMCP::ImGui::TableSetupColumn(names[idx].data(),
-                                              ImGuiMCP::ImGuiTableColumnFlags_PreferSortDescending);
-        ImGuiMCP::ImGui::TableHeadersRow();
-        if (const ImGuiMCP::ImGuiTableSortSpecs* sortSpecs = ImGuiMCP::ImGui::TableGetSortSpecs())
-            if (sortSpecs->SpecsCount > 0) {
-                s.sortColumn = sortSpecs->Specs[0].ColumnIndex;
-                s.sortAsc = sortSpecs->Specs[0].SortDirection == ImGuiMCP::ImGuiSortDirection_Ascending;
-            }
-        struct RowWrap {
-            std::string module;
-            std::string typeStr;
-            double total;
-            const std::array<double, SKSE::MessagingInterface::kTotal>* vals;
-            bool isEsp;
-        };
-        std::vector<RowWrap> enriched;
-        enriched.reserve(taggedRows.size());
-        for (auto& r : taggedRows) {
-            double sum = 0.0;
-            if (r.kind == MessagingProfiler::SourceKind::ESP) {
-                sum = r.totalMs;
-            } else {
-                for (const auto idx : active) {
-                    double v = r.perMsg[idx];
-                    if (v < 1.0) v = 0.0;
-                    sum += v;
-                }
-            }
-            enriched.push_back({r.module, r.kind == MessagingProfiler::SourceKind::ESP ? "ESP" : "DLL", sum, &r.perMsg,
-                                r.kind == MessagingProfiler::SourceKind::ESP});
-        }
-        std::ranges::sort(enriched, [&](const RowWrap& A, const RowWrap& B) {
-            if (s.sortColumn == 0) return s.sortAsc ? A.module < B.module : A.module > B.module;
-            if (s.sortColumn == 1) return s.sortAsc ? A.typeStr < B.typeStr : A.typeStr > B.typeStr;
-            if (s.sortColumn == 2) return s.sortAsc ? A.total < B.total : A.total > B.total;
-            const std::size_t msgIdx = active[s.sortColumn - 3];
-            double av = (*A.vals)[msgIdx];
-            if (av < 1.0 || A.isEsp) av = 0.0;
-            double bv = (*B.vals)[msgIdx];
-            if (bv < 1.0 || B.isEsp) bv = 0.0;
-            return s.sortAsc ? av < bv : av > bv;
-        });
-        std::vector colTotals(active.size(), 0.0);
-        for (const auto& e : enriched)
-            for (std::size_t c = 0; c < active.size(); ++c) {
-                double v = (*e.vals)[active[c]];
-                if (e.isEsp || v < 1.0) v = 0.0;
-                colTotals[c] += v;
-            }
-        double totalsSum = 0.0;
-        for (const double v : colTotals) totalsSum += v;
-        double espExtra = 0.0;
-        for (const auto& e : enriched)
-            if (e.isEsp) espExtra += e.total;
-        const double grandTotal = totalsSum + espExtra;
-        ImGuiMCP::ImGui::TableNextRow();
-        ImGuiMCP::ImGui::TableSetColumnIndex(0);
-        ImGuiMCP::ImGui::TextUnformatted("<Totals>");
-        ImGuiMCP::ImGui::TableSetColumnIndex(1);
-        ImGuiMCP::ImGui::TextUnformatted("-");
-        ImGuiMCP::ImGui::TableSetColumnIndex(2);
-        {
-            ColorCell(grandTotal, warnMs, critMs);
-            ImGuiMCP::ImGui::Text("%.1f", grandTotal);
-        }
-        for (std::size_t c = 0; c < active.size(); ++c) {
-            ImGuiMCP::ImGui::TableSetColumnIndex(static_cast<int>(c + 3));
-            const double v = colTotals[c];
-            ColorCell(v, warnMs, critMs);
-            ImGuiMCP::ImGui::Text("%.1f", v);
-        }
-        for (auto& e : enriched) {
-            ImGuiMCP::ImGui::TableNextRow();
-            ImGuiMCP::ImGui::TableSetColumnIndex(0);
-            ImGuiMCP::ImGui::TextUnformatted(e.module.c_str());
-            if (!e.isEsp && ImGuiMCP::ImGui::IsItemHovered()) {
-                auto it = g_metaCache.find(e.module);
-                if (it == g_metaCache.end()) it = g_metaCache.emplace(e.module, GetDllMeta(e.module)).first;
-                if (ImGuiMCP::ImGui::BeginTooltip()) {
-                    ImGuiMCP::ImGui::TextUnformatted(e.module.c_str());
-                    if (it->second.ok) {
-                        if (!it->second.author.empty())
-                            ImGuiMCP::ImGui::Text("Author: %s", it->second.author.c_str());
-                        if (!it->second.version.empty())
-                            ImGuiMCP::ImGui::Text("Version: %s", it->second.version.c_str());
-                        if (!it->second.license.empty())
-                            ImGuiMCP::ImGui::Text("License: %s", it->second.license.c_str());
-                    } else {
-                        ImGuiMCP::ImGui::TextUnformatted("(no version info)");
-                    }
-                    ImGuiMCP::ImGui::EndTooltip();
-                }
-            }
-            ImGuiMCP::ImGui::TableSetColumnIndex(1);
-            ImGuiMCP::ImGui::TextUnformatted(e.typeStr.c_str());
-            ImGuiMCP::ImGui::TableSetColumnIndex(2);
-            ColorCell(e.total, warnMs, critMs);
-            ImGuiMCP::ImGui::Text("%.1f", e.total);
-            for (std::size_t c = 0; c < active.size(); ++c) {
-                ImGuiMCP::ImGui::TableSetColumnIndex(static_cast<int>(c + 3));
-                double v = (*e.vals)[active[c]];
-                if (v < 1.0 || e.isEsp) v = 0.0;
-                if (!e.isEsp) ColorCell(v, warnMs, critMs);
-                ImGuiMCP::ImGui::Text("%.1f", v);
-            }
-        }
-        ImGuiMCP::ImGui::EndTable();
-    }
+    RenderSummary(s);
+    ImGuiMCP::ImGui::Spacing();
+    RenderControls(s, names, warnMs, critMs);
+    RenderResultsTable(s, names, warnMs, critMs, showDllEntries, showEspEntries);
 }
 
 void MessagingProfilerUI::ColorCell(const double v, const double warnMs, const double critMs) {
     ImGuiMCP::ImU32 col = 0;
     if (v >= critMs)
-        col = ImGuiMCP::ImGui::GetColorU32(ImGuiMCP::ImVec4(0.85f, 0.15f, 0.15f, 0.50f));
+        col = ImGuiMCP::ImGui::GetColorU32(ImGuiMCP::ImVec4(0.85f, 0.15f, 0.15f, 0.35f));
     else if (v >= warnMs)
-        col = ImGuiMCP::ImGui::GetColorU32(ImGuiMCP::ImVec4(0.95f, 0.75f, 0.10f, 0.40f));
+        col = ImGuiMCP::ImGui::GetColorU32(ImGuiMCP::ImVec4(0.95f, 0.75f, 0.10f, 0.25f));
     if (col) ImGuiMCP::ImGui::TableSetBgColor(ImGuiMCP::ImGuiTableBgTarget_CellBg, col);
 }

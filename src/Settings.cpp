@@ -6,14 +6,14 @@
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
 
-std::filesystem::path LogSettings::GetConfigPath() {
+std::filesystem::path Settings::GetConfigPath() {
     const std::filesystem::path path = R"(Data/SKSE/Plugins/LoadTimeProfiler/LoadTimeProfiler.json)";
     std::error_code ec;
     std::filesystem::create_directories(path.parent_path(), ec);
     return path;
 }
 
-void LogSettings::Load() {
+void Settings::Load() {
     auto path = GetConfigPath();
     std::ifstream ifs(path);
     if (!ifs.is_open()) return; // no file -> defaults (UI will initialize all true)
@@ -29,6 +29,8 @@ void LogSettings::Load() {
         MCP::showDllEntries = doc["show_dll_entries"].GetBool();
     if (doc.HasMember("show_esp_entries") && doc["show_esp_entries"].IsBool())
         MCP::showEspEntries = doc["show_esp_entries"].GetBool();
+    if (doc.HasMember("show_seconds") && doc["show_seconds"].IsBool())
+        MessagingProfilerUI::GetState().showSeconds = doc["show_seconds"].GetBool();
     if (doc.HasMember("profiler_visible") && doc["profiler_visible"].IsArray()) {
         auto arr = doc["profiler_visible"].GetArray();
         auto names = MessagingProfiler::GetMessageTypeNames();
@@ -51,13 +53,14 @@ void LogSettings::Load() {
     }
 }
 
-void LogSettings::Save() {
+void Settings::Save() {
     rapidjson::Document doc(rapidjson::kObjectType);
     auto& a = doc.GetAllocator();
     doc.AddMember("profiler_warn_ms", MCP::profilerWarnMs, a);
     doc.AddMember("profiler_crit_ms", MCP::profilerCritMs, a);
     doc.AddMember("show_dll_entries", MCP::showDllEntries, a);
     doc.AddMember("show_esp_entries", MCP::showEspEntries, a);
+    doc.AddMember("show_seconds", MessagingProfilerUI::GetState().showSeconds, a);
     auto names = MessagingProfiler::GetMessageTypeNames();
     auto vis = MessagingProfilerUI::GetCurrentVisibility();
     rapidjson::Value arr(rapidjson::kArrayType);

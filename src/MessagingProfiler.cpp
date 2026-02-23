@@ -1,5 +1,22 @@
 #include "MessagingProfiler.h"
 #include "Hooks.h"
+#include "MCP.h"
+
+namespace {
+    std::mutex g_currentMutex;
+    std::string g_currentModule;
+    std::atomic<long long> g_firstRegisterNs{-1};
+    std::atomic<long long> g_lastRegisterNs{-1};
+    std::atomic g_regSpanFrozen{false};
+
+    void UpdateRegisterSpan() {
+        const auto first = g_firstRegisterNs.load(std::memory_order_relaxed);
+        const auto last = g_lastRegisterNs.load(std::memory_order_relaxed);
+        if (first < 0 || last < first) return;
+        const auto diffMs = static_cast<double>(last - first) / 1'000'000.0;
+        MCP::loadTimeMs.store(diffMs, std::memory_order_relaxed);
+    }
+}
 
 std::vector<MessagingProfiler::TaggedRow> MessagingProfiler::GetTaggedRows() {
     std::vector<TaggedRow> out;
@@ -16,7 +33,6 @@ std::vector<MessagingProfiler::TaggedRow> MessagingProfiler::GetTaggedRows() {
     return out;
 }
 
-
 void MessagingProfiler::Install() {
     InitTrampolinePool();
     const auto mi = SKSE::GetMessagingInterface();
@@ -24,6 +40,11 @@ void MessagingProfiler::Install() {
         logger::warn("[Profiler] Messaging interface unavailable");
         return;
     }
+    mi->RegisterListener("SKSE", [](SKSE::MessagingInterface::Message* msg) {
+        if (msg && msg->type == SKSE::MessagingInterface::kPostLoad) {
+            g_regSpanFrozen.store(true, std::memory_order_relaxed);
+        }
+    });
     const auto rawPtr = reinterpret_cast<const MessagingExpose*>(mi)->RawProxy();
     g_rawMessaging = const_cast<SKSE::detail::SKSEMessagingInterface*>(
         static_cast<const SKSE::detail::SKSEMessagingInterface*>(rawPtr));
@@ -39,6 +60,7 @@ void MessagingProfiler::Install() {
     g_rawMessaging->RegisterListener = &Hook_RegisterListener;
     logger::info("[Profiler] Messaging hooks installed");
 }
+
 
 const char* MessagingProfiler::MessageTypeName(const std::uint32_t t) {
     using MI = SKSE::MessagingInterface;
@@ -113,9 +135,17 @@ std::string MessagingProfiler::ModuleNameFromAddress(const void* addr) {
 }
 
 void MessagingProfiler::WrapperThunk(CallbackEntry* entry, SKSE::MessagingInterface::Message* msg) {
+    {
+        std::lock_guard lk(g_currentMutex);
+        g_currentModule = entry->pluginName;
+    }
     const auto start = std::chrono::high_resolution_clock::now();
     entry->original(msg);
     const auto end = std::chrono::high_resolution_clock::now();
+    {
+        std::lock_guard lk(g_currentMutex);
+        g_currentModule.clear();
+    }
     const auto ns64 =
         static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count());
     entry->count.fetch_add(1, std::memory_order_relaxed);
@@ -172,6 +202,7 @@ MessagingProfiler::RawCallback MessagingProfiler::MakeTrampoline(std::size_t idx
 }
 
 MessagingProfiler::RawCallback MessagingProfiler::AllocateWrapper(const RawCallback original,
+                                                                  // ReSharper disable once CppParameterMayBeConstPtrOrRef
                                                                   const std::string_view sender, void* callSiteRet) {
     auto idx = g_nextIndex.load(std::memory_order_relaxed);
     while (true) {
@@ -200,6 +231,18 @@ MessagingProfiler::RawCallback MessagingProfiler::AllocateWrapper(const RawCallb
 bool MessagingProfiler::Hook_RegisterListener(const SKSE::PluginHandle handle, const char* sender, void* callback) {
     if (!callback) return g_origRegister(handle, sender, callback);
     if (!sender || std::strcmp(sender, "SKSE") != 0) return g_origRegister(handle, sender, callback);
+
+    // SKSEPluginLoad heuristic
+    if (!g_regSpanFrozen.load(std::memory_order_relaxed)) {
+        const auto nowNs = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now().time_since_epoch())
+            .count();
+        auto expected = -1LL;
+        g_firstRegisterNs.compare_exchange_strong(expected, nowNs, std::memory_order_relaxed);
+        g_lastRegisterNs.store(nowNs, std::memory_order_relaxed);
+        UpdateRegisterSpan();
+    }
+
     const auto cb = reinterpret_cast<RawCallback>(callback);
     void* retAddr = _ReturnAddress();
     const auto wrapped = AllocateWrapper(cb, sender, retAddr);
@@ -247,6 +290,20 @@ std::vector<MessagingProfiler::ModuleRow> MessagingProfiler::GetModuleRowsSnapsh
     }
     std::ranges::sort(out, [](const ModuleRow& A, const ModuleRow& B) { return A.module < B.module; });
     return out;
+}
+
+std::string MessagingProfiler::GetCurrentCallbackModule() {
+    std::lock_guard lk(g_currentMutex);
+    return g_currentModule;
+}
+
+void MessagingProfiler::SetRegisterSpanStartNow() {
+    const auto nowNs = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+    auto expected = g_firstRegisterNs.load(std::memory_order_relaxed);
+    while (expected < 0 && !g_firstRegisterNs.compare_exchange_weak(expected, nowNs, std::memory_order_relaxed)) {
+    }
 }
 
 std::vector<std::string_view> MessagingProfiler::GetMessageTypeNames() {

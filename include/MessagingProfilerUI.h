@@ -6,6 +6,8 @@ namespace MessagingProfilerUI {
         int sortColumn = 0;
         bool sortAsc = true;
         bool initializedFromDisk = false;
+        bool showSeconds = true;
+        std::array<char, 96> search{};
     };
 
     struct DllMeta {
@@ -36,7 +38,7 @@ namespace MessagingProfilerUI {
 
     DllMeta GetDllMeta(const std::string& moduleBase);
 
-    void Render(State& s, double warnMs, double critMs);
+    void Render(State& s, double& warnMs, double& critMs, bool& showDllEntries, bool& showEspEntries);
 
     void ColorCell(double v, double warnMs, double critMs);
 }
