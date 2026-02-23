@@ -9,9 +9,9 @@ namespace Utilities {
     std::string WideToUtf8(const std::wstring& ws);
 
     // Utility, kept from prev
-#ifndef NDEBUG
+    #ifndef NDEBUG
     size_t GetModuleSize(HMODULE module);
     bool IsAddressInSkyrimExe(uintptr_t addr);
     void PrintStackTrace();
-#endif
+    #endif
 };

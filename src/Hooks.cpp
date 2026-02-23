@@ -28,7 +28,8 @@ void ESPProfiling::Record(const std::string_view espName, const uint64_t ns) {
     std::lock_guard lk(g_mutex);
     std::string key(espName);
     auto it = g_entries.find(key);
-    if (it == g_entries.end()) it = g_entries.emplace(key, Entry{.name = key, .totalNs = 0, .maxNs = 0, .count = 0}).first;
+    if (it == g_entries.end()) it = g_entries.emplace(key, Entry{.name = key, .totalNs = 0, .maxNs = 0, .count = 0}).
+                                              first;
     auto& e = it->second;
     e.count++;
     e.totalNs += ns;
@@ -64,7 +65,7 @@ void Hooks::Install() {
 void Hooks::TESLoad::Install(SKSE::Trampoline& a_trampoline) {
     originalFunction =
         a_trampoline.write_call<5>(REL::RelocationID(13687, 13753).address() + REL::Relocate(0x5e, 0x323),
-                                                thunk);
+                                   thunk);
 }
 
 int64_t Hooks::TESLoad::thunk(int64_t a1, RE::TESFile* file, char a2) {
@@ -83,10 +84,10 @@ int64_t Hooks::TESLoad::thunk(int64_t a1, RE::TESFile* file, char a2) {
 void Hooks::OpenTESHook::Install(SKSE::Trampoline& a_trampoline) {
     originalFunction1 =
         a_trampoline.write_call<5>(
-        REL::RelocationID(13645, 13753).address() + REL::Relocate(0x24b, 0x23b), thunk1);
+            REL::RelocationID(13645, 13753).address() + REL::Relocate(0x24b, 0x23b), thunk1);
     originalFunction2 =
         a_trampoline.write_call<5>(
-        REL::RelocationID(13645, 13753).address() + REL::Relocate(0x2ab, 0x28b), thunk2);
+            REL::RelocationID(13645, 13753).address() + REL::Relocate(0x2ab, 0x28b), thunk2);
 }
 
 bool Hooks::OpenTESHook::thunk1(RE::TESFile* file, RE::NiFile::OpenMode m, bool l) {
@@ -118,10 +119,10 @@ bool Hooks::OpenTESHook::thunk2(RE::TESFile* file, RE::NiFile::OpenMode m, bool 
 void Hooks::CloseTESHook::Install(SKSE::Trampoline& a_trampoline) {
     originalFunction6 =
         a_trampoline.write_call<5>(
-        REL::RelocationID(13638, 13743).address() + REL::Relocate(0x430, 0x110), thunk6);
+            REL::RelocationID(13638, 13743).address() + REL::Relocate(0x430, 0x110), thunk6);
     originalFunction7 =
         a_trampoline.write_call<5>(
-        REL::RelocationID(13639, 13744).address() + REL::Relocate(0x1ac, 0x1b0), thunk7);
+            REL::RelocationID(13639, 13744).address() + REL::Relocate(0x1ac, 0x1b0), thunk7);
 }
 
 bool Hooks::CloseTESHook::thunk6(RE::TESFile* file, bool a_force) {

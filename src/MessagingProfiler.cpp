@@ -20,8 +20,8 @@ namespace {
 
 void MessagingProfiler::SetRegisterSpanStartNow() {
     const auto nowNs = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                           std::chrono::steady_clock::now().time_since_epoch())
-                           .count();
+            std::chrono::steady_clock::now().time_since_epoch())
+        .count();
     auto expected = g_firstRegisterNs.load(std::memory_order_relaxed);
     while (expected < 0 && !g_firstRegisterNs.compare_exchange_weak(expected, nowNs, std::memory_order_relaxed)) {
     }
@@ -248,8 +248,8 @@ bool MessagingProfiler::Hook_RegisterListener(const SKSE::PluginHandle handle, c
     // SKSE plugin load heuristic
     if (!g_regSpanFrozen.load(std::memory_order_relaxed)) {
         const auto nowNs = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                               std::chrono::steady_clock::now().time_since_epoch())
-                               .count();
+                std::chrono::steady_clock::now().time_since_epoch())
+            .count();
         auto expected = -1LL;
         g_firstRegisterNs.compare_exchange_strong(expected, nowNs, std::memory_order_relaxed);
         g_lastRegisterNs.store(nowNs, std::memory_order_relaxed);
