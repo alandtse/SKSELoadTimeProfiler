@@ -5,10 +5,10 @@
 #include "Settings.h"
 
 SKSEPluginLoad(const SKSE::LoadInterface* skse) {
-    SetupLog();
     MCP::loadTimeMs.store(-1.0, std::memory_order_relaxed);
-    SKSE::Init(skse);
     MessagingProfiler::SetRegisterSpanStartNow();
+    SetupLog();
+    SKSE::Init(skse);
     Hooks::Install();
     Settings::Load();
     MessagingProfiler::Install();
