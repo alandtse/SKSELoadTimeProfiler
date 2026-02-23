@@ -1,5 +1,6 @@
 #include "MCP.h"
 #include "MessagingProfilerUI.h"
+#include "Localization.h"
 
 void HelpMarker(const char* label, const char* desc) {
     ImGuiMCP::ImGui::TextDisabled("%s", label);
@@ -16,8 +17,8 @@ void MCP::Register() {
         logger::error("SKSEMenuFramework is not installed.");
         return;
     }
-    SKSEMenuFramework::SetSection("Utilities");
-    SKSEMenuFramework::AddSectionItem("Load Time Profiler", RenderProfiler);
+    SKSEMenuFramework::SetSection(Localization::SectionUtilities.c_str());
+    SKSEMenuFramework::AddSectionItem(Localization::MenuItemLoadTimeProfiler.c_str(), RenderProfiler);
 }
 
 void __stdcall MCP::RenderProfiler() {
