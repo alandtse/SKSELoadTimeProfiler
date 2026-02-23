@@ -1,7 +1,7 @@
 #pragma once
 #include "SKSEMCP/SKSEMenuFramework.hpp"
 
-static void HelpMarker(const char* desc);
+void HelpMarker(const char* label, const char* desc);
 
 namespace MCP::UI {
     inline void ReadOnlyField(const char* label, const std::string& value, const char* id) {

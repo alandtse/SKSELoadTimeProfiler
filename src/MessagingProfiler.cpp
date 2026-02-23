@@ -18,15 +18,6 @@ namespace {
     }
 }
 
-void MessagingProfiler::SetRegisterSpanStartNow() {
-    const auto nowNs = std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::steady_clock::now().time_since_epoch())
-        .count();
-    auto expected = g_firstRegisterNs.load(std::memory_order_relaxed);
-    while (expected < 0 && !g_firstRegisterNs.compare_exchange_weak(expected, nowNs, std::memory_order_relaxed)) {
-    }
-}
-
 std::vector<MessagingProfiler::TaggedRow> MessagingProfiler::GetTaggedRows() {
     std::vector<TaggedRow> out;
     for (auto names = GetModuleRowsSnapshot(); auto& r : names) {
@@ -41,7 +32,6 @@ std::vector<MessagingProfiler::TaggedRow> MessagingProfiler::GetTaggedRows() {
     }
     return out;
 }
-
 
 void MessagingProfiler::Install() {
     InitTrampolinePool();
@@ -70,6 +60,7 @@ void MessagingProfiler::Install() {
     g_rawMessaging->RegisterListener = &Hook_RegisterListener;
     logger::info("[Profiler] Messaging hooks installed");
 }
+
 
 const char* MessagingProfiler::MessageTypeName(const std::uint32_t t) {
     using MI = SKSE::MessagingInterface;
@@ -172,11 +163,6 @@ void MessagingProfiler::WrapperThunk(CallbackEntry* entry, SKSE::MessagingInterf
     }
 }
 
-std::string MessagingProfiler::GetCurrentCallbackModule() {
-    std::lock_guard lk(g_currentMutex);
-    return g_currentModule;
-}
-
 void MessagingProfiler::InitTrampolinePool() {
     if (g_trampBase) return;
     constexpr std::size_t totalSize = MAX_WRAPPERS * TRAMP_SIZE;
@@ -216,6 +202,7 @@ MessagingProfiler::RawCallback MessagingProfiler::MakeTrampoline(std::size_t idx
 }
 
 MessagingProfiler::RawCallback MessagingProfiler::AllocateWrapper(const RawCallback original,
+                                                                  // ReSharper disable once CppParameterMayBeConstPtrOrRef
                                                                   const std::string_view sender, void* callSiteRet) {
     auto idx = g_nextIndex.load(std::memory_order_relaxed);
     while (true) {
@@ -303,6 +290,20 @@ std::vector<MessagingProfiler::ModuleRow> MessagingProfiler::GetModuleRowsSnapsh
     }
     std::ranges::sort(out, [](const ModuleRow& A, const ModuleRow& B) { return A.module < B.module; });
     return out;
+}
+
+std::string MessagingProfiler::GetCurrentCallbackModule() {
+    std::lock_guard lk(g_currentMutex);
+    return g_currentModule;
+}
+
+void MessagingProfiler::SetRegisterSpanStartNow() {
+    const auto nowNs = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+    auto expected = g_firstRegisterNs.load(std::memory_order_relaxed);
+    while (expected < 0 && !g_firstRegisterNs.compare_exchange_weak(expected, nowNs, std::memory_order_relaxed)) {
+    }
 }
 
 std::vector<std::string_view> MessagingProfiler::GetMessageTypeNames() {

@@ -28,8 +28,9 @@ void ESPProfiling::Record(const std::string_view espName, const uint64_t ns) {
     std::lock_guard lk(g_mutex);
     std::string key(espName);
     auto it = g_entries.find(key);
-    if (it == g_entries.end()) it = g_entries.emplace(key, Entry{.name = key, .totalNs = 0, .maxNs = 0, .count = 0}).
-                                              first;
+    if (it == g_entries.end())
+        it = g_entries.emplace(key, Entry{.name = key, .totalNs = 0, .maxNs = 0, .count = 0}).
+                       first;
     auto& e = it->second;
     e.count++;
     e.totalNs += ns;
