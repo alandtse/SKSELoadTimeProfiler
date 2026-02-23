@@ -1,5 +1,4 @@
 #pragma once
-#include "Utils.h"
 #include "SKSEMCP/SKSEMenuFramework.hpp"
 
 static void HelpMarker(const char* desc);
@@ -20,6 +19,7 @@ namespace MCP {
     inline double profilerCritMs = 2000.0;
     inline bool showDllEntries = true;
     inline bool showEspEntries = true;
+    inline std::atomic loadTimeMs{-1.0};
 
     void Register();
     void __stdcall RenderProfiler();

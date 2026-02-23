@@ -4,6 +4,7 @@
 #include "MessagingProfiler.h"
 #include "Hooks.h"
 #include "Settings.h"
+#include "Utils.h"
 
 bool MessagingProfilerUI::QueryVersionString(const wchar_t* path, const wchar_t* key, std::wstring& out) {
     DWORD handle = 0;
@@ -65,6 +66,13 @@ void MessagingProfilerUI::Render(State& s, const double warnMs, const double cri
         ImGuiMCP::ImGui::BeginTooltip();
         ImGuiMCP::ImGui::TextUnformatted("Default unit is ms.");
         ImGuiMCP::ImGui::EndTooltip();
+    }
+    const double loadMs = MCP::loadTimeMs.load(std::memory_order_relaxed);
+    if (loadMs >= 0.0) {
+        const double displayScale = s.showSeconds ? 0.001 : 1.0;
+        const char* displayFmt = s.showSeconds ? "SKSE total Plugin Load time: %.2f s" :
+                                                 "SKSE total Plugin Load time: %.3f ms";
+        ImGuiMCP::ImGui::Text(displayFmt, loadMs * displayScale);
     }
     const auto currentDll = MessagingProfiler::GetCurrentCallbackModule();
     const auto currentEsp = ESPProfiling::GetCurrentLoading();
