@@ -1,11 +1,11 @@
 #include "MessagingProfilerUI.h"
 #include "MCP.h"
-#include <SKSEMCP/SKSEMenuFramework.hpp>
 #include "MessagingProfiler.h"
 #include "Hooks.h"
 #include "Settings.h"
 #include "Utils.h"
 #include "Localization.h"
+#include <fmt/printf.h>
 
 
 bool MessagingProfilerUI::QueryVersionString(const wchar_t* path, const wchar_t* key, std::wstring& out) {
@@ -59,6 +59,16 @@ MessagingProfilerUI::DllMeta MessagingProfilerUI::GetDllMeta(const std::string& 
 }
 
 namespace {
+    template <class... Args>
+    std::string FormatLocalized(const std::string& format, Args&&... args) {
+        try {
+            return fmt::sprintf(format, std::forward<Args>(args)...);
+        } catch (const fmt::format_error& e) {
+            logger::warn("[Localization] Invalid format string '{}': {}", format, e.what());
+            return {};
+        }
+    }
+
     struct RowWrap {
         std::string module;
         std::string_view typeStr;
@@ -122,9 +132,11 @@ namespace {
             ImGuiMCP::ImGui::TableSetColumnIndex(1);
             if (loadMs >= 0.0) {
                 if (s.showSeconds) {
-                    ImGuiMCP::ImGui::Text(Localization::FormatSeconds.c_str(), loadMs * 0.001);
+                    const auto text = FormatLocalized(Localization::FormatSeconds, loadMs * 0.001);
+                    ImGuiMCP::ImGui::TextUnformatted(text.c_str());
                 } else {
-                    ImGuiMCP::ImGui::Text(Localization::FormatMilliseconds.c_str(), loadMs);
+                    const auto text = FormatLocalized(Localization::FormatMilliseconds, loadMs);
+                    ImGuiMCP::ImGui::TextUnformatted(text.c_str());
                 }
             } else {
                 ImGuiMCP::ImGui::TextUnformatted(Localization::PlaceholderEmpty.c_str());
@@ -442,15 +454,21 @@ namespace {
                             if (ImGuiMCP::ImGui::BeginTooltip()) {
                                 ImGuiMCP::ImGui::TextUnformatted(e.module.c_str());
                                 if (it->second.ok) {
-                                    if (!it->second.author.empty())
-                                        ImGuiMCP::ImGui::Text(Localization::TooltipAuthor.c_str(),
-                                                              it->second.author.c_str());
-                                    if (!it->second.version.empty())
-                                        ImGuiMCP::ImGui::Text(Localization::TooltipVersion.c_str(),
-                                                              it->second.version.c_str());
-                                    if (!it->second.license.empty())
-                                        ImGuiMCP::ImGui::Text(Localization::TooltipLicense.c_str(),
-                                                              it->second.license.c_str());
+                                    if (!it->second.author.empty()) {
+                                        const auto text =
+                                            FormatLocalized(Localization::TooltipAuthor, it->second.author.c_str());
+                                        ImGuiMCP::ImGui::TextUnformatted(text.c_str());
+                                    }
+                                    if (!it->second.version.empty()) {
+                                        const auto text =
+                                            FormatLocalized(Localization::TooltipVersion, it->second.version.c_str());
+                                        ImGuiMCP::ImGui::TextUnformatted(text.c_str());
+                                    }
+                                    if (!it->second.license.empty()) {
+                                        const auto text =
+                                            FormatLocalized(Localization::TooltipLicense, it->second.license.c_str());
+                                        ImGuiMCP::ImGui::TextUnformatted(text.c_str());
+                                    }
                                 } else {
                                     ImGuiMCP::ImGui::TextUnformatted(Localization::TooltipNoVersionInfo.c_str());
                                 }
