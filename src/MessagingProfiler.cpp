@@ -7,7 +7,7 @@ namespace {
     std::string g_currentModule;
     std::atomic<long long> g_firstRegisterNs{-1};
     std::atomic<long long> g_lastRegisterNs{-1};
-    std::atomic<bool> g_regSpanFrozen{false};
+    std::atomic g_regSpanFrozen{false};
 
     void UpdateRegisterSpan() {
         const auto first = g_firstRegisterNs.load(std::memory_order_relaxed);
@@ -232,7 +232,7 @@ bool MessagingProfiler::Hook_RegisterListener(const SKSE::PluginHandle handle, c
     if (!callback) return g_origRegister(handle, sender, callback);
     if (!sender || std::strcmp(sender, "SKSE") != 0) return g_origRegister(handle, sender, callback);
 
-    // SKSE plugin load heuristic
+    // SKSEPluginLoad heuristic
     if (!g_regSpanFrozen.load(std::memory_order_relaxed)) {
         const auto nowNs = std::chrono::duration_cast<std::chrono::nanoseconds>(
                 std::chrono::steady_clock::now().time_since_epoch())

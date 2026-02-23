@@ -126,9 +126,7 @@ namespace {
                                         ImGuiMCP::ImGuiTableFlags_BordersInnerV)) {
             ImGuiMCP::ImGui::TableNextRow();
             ImGuiMCP::ImGui::TableSetColumnIndex(0);
-            ImGuiMCP::ImGui::TextUnformatted("SKSE init time");
-            ImGuiMCP::ImGui::SameLine();
-            HelpMarker("(?)", "Lower bound measured from first to last RegisterListener before PostLoad.");
+            ImGuiMCP::ImGui::TextUnformatted("SKSE init time (heuristic)");
             ImGuiMCP::ImGui::TableSetColumnIndex(1);
             if (loadMs >= 0.0) {
                 if (s.showSeconds) {
