@@ -408,8 +408,7 @@ namespace {
 
         ImGuiMCP::ImVec2 avail{};
         ImGuiMCP::ImGui::GetContentRegionAvail(&avail);
-        float childHeight = avail.y * 0.9f;
-        if (childHeight < 200.0f) childHeight = avail.y;
+        const float childHeight = avail.y;
 
         ImGuiMCP::ImGui::BeginChild("##msgprof-results", ImGuiMCP::ImVec2(0.0f, childHeight), true);
         const auto active = BuildActiveSelections(s);
