@@ -75,7 +75,6 @@ void Localization::Load() {
     TooltipVersion = GetOrWarn(doc, "$ltpTooltipVersion");
     TooltipLicense = GetOrWarn(doc, "$ltpTooltipLicense");
     TooltipNoVersionInfo = GetOrWarn(doc, "$ltpTooltipNoVersionInfo");
-    TotalsHelp = GetOrWarn(doc, "$ltpTotalsHelp");
     FormatSeconds = GetOrWarn(doc, "$ltpFormatSeconds");
     FormatMilliseconds = GetOrWarn(doc, "$ltpFormatMilliseconds");
     MsgPostLoad = GetOrWarn(doc, "$ltpMsgPostLoad");

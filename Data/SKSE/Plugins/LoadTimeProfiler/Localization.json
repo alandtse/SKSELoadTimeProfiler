@@ -38,7 +38,6 @@
   "$ltpTooltipVersion": "Version: %s",
   "$ltpTooltipLicense": "License: %s",
   "$ltpTooltipNoVersionInfo": "(no version info)",
-  "$ltpTotalsHelp": "Totals row sums visible per-module averages for selected message types. Threshold colors use warn/crit values. ESP rows only show total load time aggregated.",
   "$ltpFormatSeconds": "%.2f s",
   "$ltpFormatMilliseconds": "%.3f ms",
   "$ltpMsgPostLoad": "PostLoad",
