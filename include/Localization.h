@@ -40,7 +40,6 @@ namespace Localization {
     inline std::string TooltipVersion;
     inline std::string TooltipLicense;
     inline std::string TooltipNoVersionInfo;
-    inline std::string TotalsHelp;
     inline std::string FormatSeconds;
     inline std::string FormatMilliseconds;
     inline std::string MsgPostLoad;

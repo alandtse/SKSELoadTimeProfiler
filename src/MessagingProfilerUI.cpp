@@ -516,7 +516,6 @@ namespace {
         ImGuiMCP::ImGui::EndChild();
 
         ImGuiMCP::ImGui::Spacing();
-        ImGuiMCP::ImGui::TextWrapped(Localization::TotalsHelp.c_str());
     }
 }
 
