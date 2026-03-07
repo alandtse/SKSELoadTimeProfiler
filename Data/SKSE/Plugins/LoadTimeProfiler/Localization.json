@@ -23,7 +23,6 @@
   "$ltpMessageTypes": "Message Types",
   "$ltpSearch": "Search",
   "$ltpSearchHint": "Filter by module...",
-  "$ltpExportFormatLabel": "Export as",
   "$ltpExportFormatCsv": "CSV",
   "$ltpExportFormatTxt": "TXT",
   "$ltpExportButton": "Export",

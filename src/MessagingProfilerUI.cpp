@@ -161,6 +161,27 @@ namespace {
         RenderSummaryCurrentLoadingValue(name, elapsedMs, showSeconds);
     }
 
+    void RenderSummaryActions(MessagingProfilerUI::State& s) {
+        const auto exportButtonLabel = Localization::MakeLabel(Localization::ExportButton, "export-button");
+        if (ImGuiMCP::ImGui::Button(exportButtonLabel.c_str())) {
+            const auto format = s.exportFormat == static_cast<int>(Export::Format::Txt)
+                                    ? Export::Format::Txt
+                                    : Export::Format::Csv;
+            Export::WriteSnapshot(format, s.exportStatus);
+        }
+
+        ImGuiMCP::ImGui::SameLine();
+        ImGuiMCP::ImGui::SetNextItemWidth(120.0f);
+        const auto exportFormatLabel = Localization::MakeLabel("", "export-format");
+        const char* formats[] = {Localization::ExportFormatCsv.c_str(), Localization::ExportFormatTxt.c_str()};
+        ImGuiMCP::ImGui::Combo(exportFormatLabel.c_str(), &s.exportFormat, formats, 2);
+
+        if (!s.exportStatus.empty()) {
+            ImGuiMCP::ImGui::SameLine();
+            ImGuiMCP::ImGui::TextUnformatted(s.exportStatus.c_str());
+        }
+    }
+
     void RenderResultsToolbar(MessagingProfilerUI::State& s, bool& showDllEntries, bool& showEspEntries) {
         ImGuiMCP::ImGui::SetNextItemWidth(260.0f);
         const auto searchLabel = Localization::MakeLabel(Localization::SearchLabel, "search");
@@ -181,26 +202,6 @@ namespace {
         if (ImGuiMCP::ImGui::Checkbox(espLabel.c_str(), &esp)) {
             showEspEntries = esp;
             Settings::Save();
-        }
-
-        ImGuiMCP::ImGui::SameLine();
-        ImGuiMCP::ImGui::SetNextItemWidth(120.0f);
-        const auto exportFormatLabel = Localization::MakeLabel(Localization::ExportFormatLabel, "export-format");
-        const char* formats[] = {Localization::ExportFormatCsv.c_str(), Localization::ExportFormatTxt.c_str()};
-        ImGuiMCP::ImGui::Combo(exportFormatLabel.c_str(), &s.exportFormat, formats, 2);
-
-        ImGuiMCP::ImGui::SameLine();
-        const auto exportButtonLabel = Localization::MakeLabel(Localization::ExportButton, "export-button");
-        if (ImGuiMCP::ImGui::Button(exportButtonLabel.c_str())) {
-            const auto format = s.exportFormat == static_cast<int>(Export::Format::Txt)
-                                    ? Export::Format::Txt
-                                    : Export::Format::Csv;
-            Export::WriteSnapshot(format, s.exportStatus);
-        }
-
-        if (!s.exportStatus.empty()) {
-            ImGuiMCP::ImGui::SameLine();
-            ImGuiMCP::ImGui::TextUnformatted(s.exportStatus.c_str());
         }
     }
 
@@ -598,6 +599,7 @@ void MessagingProfilerUI::Render(State& s, double& warnMs, double& critMs, bool&
     }
 
     RenderSummary(s);
+    RenderSummaryActions(s);
     ImGuiMCP::ImGui::Spacing();
     RenderControls(s, names, warnMs, critMs);
     RenderResultsTable(s, names, warnMs, critMs, showDllEntries, showEspEntries);
