@@ -12,6 +12,8 @@ namespace {
         double totalDllMs{0.0};
         double totalEspMs{0.0};
         double totalAllMs{0.0};
+        std::size_t dllCount{0};
+        std::size_t espCount{0};
     };
 
     struct ExportRow {
@@ -251,8 +253,10 @@ namespace {
         SummaryMetrics metrics;
         for (const auto& row : taggedRows) {
             if (row.kind == MessagingProfiler::SourceKind::ESP) {
+                ++metrics.espCount;
                 metrics.totalEspMs += row.totalMs;
             } else {
+                ++metrics.dllCount;
                 for (const double value : row.perMsg)
                     if (value >= 1.0) metrics.totalDllMs += value;
             }
@@ -366,7 +370,10 @@ namespace {
         out << "skse_init_time_heuristic_ms," << FormatMs(summary.skseInitMs) << "\n";
         out << "total_dll_time_ms," << FormatMs(summary.totalDllMs) << "\n";
         out << "total_esp_time_ms," << FormatMs(summary.totalEspMs) << "\n";
-        out << "total_time_ms," << FormatMs(summary.totalAllMs) << "\n\n";
+        out << "total_time_ms," << FormatMs(summary.totalAllMs) << "\n";
+
+        out << "dll_count," << summary.dllCount << "\n";
+        out << "esp_count," << summary.espCount << "\n\n";
 
         out << "system_key,system_value\n";
         out << "skyrim_runtime_variant," << EscapeCsv(systemInfo.runtimeVariant) << "\n";
@@ -425,7 +432,9 @@ namespace {
         out << "skse_init_time_heuristic_ms: " << FormatMs(summary.skseInitMs) << "\n";
         out << "total_dll_time_ms: " << FormatMs(summary.totalDllMs) << "\n";
         out << "total_esp_time_ms: " << FormatMs(summary.totalEspMs) << "\n";
-        out << "total_time_ms: " << FormatMs(summary.totalAllMs) << "\n\n";
+        out << "total_time_ms: " << FormatMs(summary.totalAllMs) << "\n";
+        out << "dll_count: " << summary.dllCount << "\n";
+        out << "esp_count: " << summary.espCount << "\n\n";
 
         out << "System\n";
         out << "skyrim_runtime_variant: " << SanitizeText(systemInfo.runtimeVariant) << "\n";
