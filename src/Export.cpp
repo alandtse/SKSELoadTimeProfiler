@@ -44,7 +44,7 @@ namespace {
     std::string FormatMs(const double value) {
         if (value < 0.0) return {};
         std::ostringstream os;
-        os << std::fixed << std::setprecision(3) << value;
+        os << std::fixed << std::setprecision(0) << value;
         return os.str();
     }
 
@@ -199,11 +199,20 @@ namespace {
         adapter.cb = sizeof(adapter);
 
         for (DWORD index = 0; EnumDisplayDevicesA(nullptr, index, &adapter, 0) != FALSE; ++index) {
+            if ((adapter.StateFlags & DISPLAY_DEVICE_MIRRORING_DRIVER) != 0) {
+                adapter = {};
+                adapter.cb = sizeof(adapter);
+                continue;
+            }
+
             auto model = TrimAscii(adapter.DeviceString);
             if (model.empty()) model = PlaceholderText();
 
             const auto vendor = DetectGpuVendor(adapter.DeviceID);
-            gpus.push_back(vendor == "Unknown" ? model : fmt::format("{} {}", vendor, model));
+            const auto label = vendor == "Unknown" ? model : fmt::format("{} {}", vendor, model);
+            if (std::ranges::find(gpus, label) == gpus.end()) {
+                gpus.push_back(label);
+            }
 
             adapter = {};
             adapter.cb = sizeof(adapter);
