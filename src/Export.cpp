@@ -83,6 +83,13 @@ namespace {
         return value;
     }
 
+    std::string Ellipsize(const std::string_view value, const std::size_t maxWidth) {
+        std::string s = SanitizeText(std::string(value));
+        if (s.size() <= maxWidth) return s;
+        if (maxWidth <= 3) return s.substr(0, maxWidth);
+        return s.substr(0, maxWidth - 3) + "...";
+    }
+
     std::string MakeTimestampForFile() {
         const auto now = std::chrono::system_clock::now();
         const std::time_t nowTime = std::chrono::system_clock::to_time_t(now);
@@ -367,19 +374,88 @@ namespace {
         out << "cpu_model: " << SanitizeText(systemInfo.cpuModel) << "\n";
         out << "gpu_list: " << SanitizeText(systemInfo.gpuList) << "\n\n";
 
-        out << "module\tauthor\tversion\ttype\ttotal_ms";
-        for (const auto& name : messageNames) out << '\t' << name << "_ms";
-        out << "\n";
+        constexpr std::size_t kMaxModuleWidth = 48;
+        constexpr std::size_t kMaxAuthorWidth = 28;
+        constexpr std::size_t kMaxVersionWidth = 16;
+
+        std::vector<std::string> msgHeaders;
+        msgHeaders.reserve(messageNames.size());
+        for (const auto& name : messageNames) msgHeaders.push_back(std::string(name) + "_ms");
+
+        std::size_t moduleWidth = std::string_view("module").size();
+        std::size_t authorWidth = std::string_view("author").size();
+        std::size_t versionWidth = std::string_view("version").size();
+        std::size_t typeWidth = std::string_view("type").size();
+        std::size_t totalWidth = std::string_view("total_ms").size();
+        std::vector<std::size_t> msgWidths(msgHeaders.size(), 0);
+        for (std::size_t i = 0; i < msgHeaders.size(); ++i) msgWidths[i] = msgHeaders[i].size();
+
+        struct RenderedRow {
+            std::string module;
+            std::string author;
+            std::string version;
+            std::string type;
+            std::string total;
+            std::vector<std::string> perMsg;
+        };
+
+        std::vector<RenderedRow> rendered;
+        rendered.reserve(sortedRows.size());
 
         for (const auto* row : sortedRows) {
-            out << SanitizeText(row->module) << '\t';
-            out << SanitizeText(row->author) << '\t';
-            out << SanitizeText(row->version) << '\t';
-            out << (row->isEsp ? "ESP" : "DLL") << '\t';
-            out << FormatMs(row->totalMs);
-            for (double value : row->perMsg) {
+            RenderedRow rr;
+            rr.module = Ellipsize(row->module, kMaxModuleWidth);
+            rr.author = Ellipsize(row->author, kMaxAuthorWidth);
+            rr.version = Ellipsize(row->version, kMaxVersionWidth);
+            rr.type = row->isEsp ? "ESP" : "DLL";
+            rr.total = FormatMs(row->totalMs);
+            rr.perMsg.reserve(row->perMsg.size());
+
+            moduleWidth = std::min(kMaxModuleWidth, std::max(moduleWidth, rr.module.size()));
+            authorWidth = std::min(kMaxAuthorWidth, std::max(authorWidth, rr.author.size()));
+            versionWidth = std::min(kMaxVersionWidth, std::max(versionWidth, rr.version.size()));
+            typeWidth = std::max(typeWidth, rr.type.size());
+            totalWidth = std::max(totalWidth, rr.total.size());
+
+            for (std::size_t i = 0; i < row->perMsg.size(); ++i) {
+                double value = row->perMsg[i];
                 if (row->isEsp) value = 0.0;
-                out << '\t' << FormatMs(value);
+                const auto cell = FormatMs(value);
+                rr.perMsg.push_back(cell);
+                if (i < msgWidths.size()) msgWidths[i] = std::max(msgWidths[i], cell.size());
+            }
+
+            rendered.push_back(std::move(rr));
+        }
+
+        out << std::left
+            << std::setw(static_cast<int>(moduleWidth)) << "module" << "  "
+            << std::setw(static_cast<int>(authorWidth)) << "author" << "  "
+            << std::setw(static_cast<int>(versionWidth)) << "version" << "  "
+            << std::setw(static_cast<int>(typeWidth)) << "type" << "  "
+            << std::right << std::setw(static_cast<int>(totalWidth)) << "total_ms";
+        for (std::size_t i = 0; i < msgHeaders.size(); ++i) {
+            out << "  " << std::setw(static_cast<int>(msgWidths[i])) << msgHeaders[i];
+        }
+        out << "\n";
+
+        out << std::string(moduleWidth, '-') << "  "
+            << std::string(authorWidth, '-') << "  "
+            << std::string(versionWidth, '-') << "  "
+            << std::string(typeWidth, '-') << "  "
+            << std::string(totalWidth, '-');
+        for (const auto w : msgWidths) out << "  " << std::string(w, '-');
+        out << "\n";
+
+        for (const auto& rr : rendered) {
+            out << std::left
+                << std::setw(static_cast<int>(moduleWidth)) << rr.module << "  "
+                << std::setw(static_cast<int>(authorWidth)) << rr.author << "  "
+                << std::setw(static_cast<int>(versionWidth)) << rr.version << "  "
+                << std::setw(static_cast<int>(typeWidth)) << rr.type << "  "
+                << std::right << std::setw(static_cast<int>(totalWidth)) << rr.total;
+            for (std::size_t i = 0; i < rr.perMsg.size() && i < msgWidths.size(); ++i) {
+                out << "  " << std::setw(static_cast<int>(msgWidths[i])) << rr.perMsg[i];
             }
             out << "\n";
         }
