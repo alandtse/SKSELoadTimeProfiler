@@ -346,6 +346,13 @@ namespace {
         std::ofstream out(path, std::ios::trunc);
         if (!out.is_open()) return false;
 
+        std::vector<const ExportRow*> sortedRows;
+        sortedRows.reserve(rows.size());
+        for (const auto& row : rows) sortedRows.push_back(&row);
+        std::ranges::sort(sortedRows, [](const ExportRow* a, const ExportRow* b) {
+            return a->totalMs > b->totalMs;
+        });
+
         out << "Summary\n";
         out << "skse_init_time_heuristic_ms: " << FormatMs(summary.skseInitMs) << "\n";
         out << "total_dll_time_ms: " << FormatMs(summary.totalDllMs) << "\n";
@@ -364,14 +371,14 @@ namespace {
         for (const auto& name : messageNames) out << '\t' << name << "_ms";
         out << "\n";
 
-        for (const auto& row : rows) {
-            out << SanitizeText(row.module) << '\t';
-            out << SanitizeText(row.author) << '\t';
-            out << SanitizeText(row.version) << '\t';
-            out << (row.isEsp ? "ESP" : "DLL") << '\t';
-            out << FormatMs(row.totalMs);
-            for (double value : row.perMsg) {
-                if (row.isEsp) value = 0.0;
+        for (const auto* row : sortedRows) {
+            out << SanitizeText(row->module) << '\t';
+            out << SanitizeText(row->author) << '\t';
+            out << SanitizeText(row->version) << '\t';
+            out << (row->isEsp ? "ESP" : "DLL") << '\t';
+            out << FormatMs(row->totalMs);
+            for (double value : row->perMsg) {
+                if (row->isEsp) value = 0.0;
                 out << '\t' << FormatMs(value);
             }
             out << "\n";
