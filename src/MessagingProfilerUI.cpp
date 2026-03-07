@@ -2,10 +2,12 @@
 #include "MCP.h"
 #include "MessagingProfiler.h"
 #include "Hooks.h"
+#include "Export.h"
 #include "Settings.h"
 #include "Utils.h"
 #include "Localization.h"
 #include <fmt/printf.h>
+#include "SKSEMCP/SKSEMenuFramework.hpp"
 
 
 bool MessagingProfilerUI::QueryVersionString(const wchar_t* path, const wchar_t* key, std::wstring& out) {
@@ -19,8 +21,9 @@ bool MessagingProfilerUI::QueryVersionString(const wchar_t* path, const wchar_t*
         WORD wCodePage;
     };
     LANGANDCODEPAGE* lpTranslate = nullptr;
-    UINT cbTranslate = 0;
-    if (!VerQueryValueW(buf.data(), L"\\VarFileInfo\\Translation", (LPVOID*)&lpTranslate, &cbTranslate) ||
+    std::uint32_t cbTranslate = 0;
+    if (!VerQueryValueW(buf.data(), L"\\VarFileInfo\\Translation", reinterpret_cast<void**>(&lpTranslate),
+                        &cbTranslate) ||
         cbTranslate < sizeof(LANGANDCODEPAGE)) {
         static LANGANDCODEPAGE fallback{0x0409, 1200};
         lpTranslate = &fallback;
@@ -30,8 +33,8 @@ bool MessagingProfilerUI::QueryVersionString(const wchar_t* path, const wchar_t*
     for (UINT i = 0; i < cbTranslate / sizeof(LANGANDCODEPAGE); ++i) {
         _snwprintf_s(query, _TRUNCATE, L"\\StringFileInfo\\%04x%04x\\%s", lpTranslate[i].wLanguage,
                      lpTranslate[i].wCodePage, key);
-        LPVOID val = nullptr;
-        UINT bytes = 0;
+        void* val = nullptr;
+        std::uint32_t bytes = 0;
         if (VerQueryValueW(buf.data(), query, &val, &bytes) && val && bytes) {
             out.assign(static_cast<const wchar_t*>(val));
             return true;
@@ -178,6 +181,26 @@ namespace {
         if (ImGuiMCP::ImGui::Checkbox(espLabel.c_str(), &esp)) {
             showEspEntries = esp;
             Settings::Save();
+        }
+
+        ImGuiMCP::ImGui::SameLine();
+        ImGuiMCP::ImGui::SetNextItemWidth(120.0f);
+        const auto exportFormatLabel = Localization::MakeLabel(Localization::ExportFormatLabel, "export-format");
+        const char* formats[] = {Localization::ExportFormatCsv.c_str(), Localization::ExportFormatTxt.c_str()};
+        ImGuiMCP::ImGui::Combo(exportFormatLabel.c_str(), &s.exportFormat, formats, 2);
+
+        ImGuiMCP::ImGui::SameLine();
+        const auto exportButtonLabel = Localization::MakeLabel(Localization::ExportButton, "export-button");
+        if (ImGuiMCP::ImGui::Button(exportButtonLabel.c_str())) {
+            const auto format = s.exportFormat == static_cast<int>(Export::Format::Txt)
+                                    ? Export::Format::Txt
+                                    : Export::Format::Csv;
+            Export::WriteSnapshot(format, s.exportStatus);
+        }
+
+        if (!s.exportStatus.empty()) {
+            ImGuiMCP::ImGui::SameLine();
+            ImGuiMCP::ImGui::TextUnformatted(s.exportStatus.c_str());
         }
     }
 
@@ -373,8 +396,9 @@ namespace {
                 }
             }
             result.rows.push_back({r.module,
-                                   r.kind == MessagingProfiler::SourceKind::ESP ? Localization::TypeEsp
-                                                                               : Localization::TypeDll,
+                                   r.kind == MessagingProfiler::SourceKind::ESP
+                                       ? Localization::TypeEsp
+                                       : Localization::TypeDll,
                                    sum,
                                    &r.perMsg,
                                    r.kind == MessagingProfiler::SourceKind::ESP});
@@ -430,8 +454,9 @@ namespace {
                                         ImGuiMCP::ImGuiTableFlags_Sortable |
                                         ImGuiMCP::ImGuiTableFlags_ScrollX |
                                         ImGuiMCP::ImGuiTableFlags_ScrollY)) {
-            const auto& totalLabel = s.showSeconds ? Localization::TotalSecondsLabel
-                                                   : Localization::TotalMillisecondsLabel;
+            const auto& totalLabel = s.showSeconds
+                                         ? Localization::TotalSecondsLabel
+                                         : Localization::TotalMillisecondsLabel;
             const auto moduleLabel = Localization::MakeLabel(Localization::ColumnModule, "module");
             const auto typeLabel = Localization::MakeLabel(Localization::ColumnType, "type");
             const auto totalHeader = Localization::MakeLabel(totalLabel, "total");
@@ -439,7 +464,8 @@ namespace {
                 moduleLabel.c_str(),
                 ImGuiMCP::ImGuiTableColumnFlags_DefaultSort | ImGuiMCP::ImGuiTableColumnFlags_WidthStretch);
             ImGuiMCP::ImGui::TableSetupColumn(typeLabel.c_str(), ImGuiMCP::ImGuiTableColumnFlags_PreferSortDescending);
-            ImGuiMCP::ImGui::TableSetupColumn(totalHeader.c_str(), ImGuiMCP::ImGuiTableColumnFlags_PreferSortDescending);
+            ImGuiMCP::ImGui::TableSetupColumn(totalHeader.c_str(),
+                                              ImGuiMCP::ImGuiTableColumnFlags_PreferSortDescending);
             for (const auto idx : active) {
                 const auto& visible = Localization::MessageTypeLabel(idx);
                 const auto colLabel = Localization::MakeLabel(visible, names[idx].data());

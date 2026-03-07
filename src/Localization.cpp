@@ -60,6 +60,12 @@ void Localization::Load() {
     HeaderMessageTypes = GetOrWarn(doc, "$ltpMessageTypes");
     SearchLabel = GetOrWarn(doc, "$ltpSearch");
     SearchHint = GetOrWarn(doc, "$ltpSearchHint");
+    ExportFormatLabel = GetOrWarn(doc, "$ltpExportFormatLabel");
+    ExportFormatCsv = GetOrWarn(doc, "$ltpExportFormatCsv");
+    ExportFormatTxt = GetOrWarn(doc, "$ltpExportFormatTxt");
+    ExportButton = GetOrWarn(doc, "$ltpExportButton");
+    ExportStatusSuccess = GetOrWarn(doc, "$ltpExportStatusSuccess");
+    ExportStatusFailed = GetOrWarn(doc, "$ltpExportStatusFailed");
     FilterDll = GetOrWarn(doc, "$ltpFilterDll");
     FilterEsp = GetOrWarn(doc, "$ltpFilterEsp");
     TypeDll = GetOrWarn(doc, "$ltpTypeDll");

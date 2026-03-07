@@ -5,6 +5,7 @@ set(sources ${sources}
 	src/Hooks.cpp
 	src/MCP.cpp
 	src/Localization.cpp
+	src/Export.cpp
 	src/MessagingProfilerUI.cpp
 	src/MessagingProfiler.cpp
 )

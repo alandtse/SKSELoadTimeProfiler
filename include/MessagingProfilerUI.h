@@ -7,6 +7,8 @@ namespace MessagingProfilerUI {
         bool sortAsc = true;
         bool initializedFromDisk = false;
         bool showSeconds = true;
+        int exportFormat = 0;
+        std::string exportStatus;
         std::array<char, 96> search{};
     };
 

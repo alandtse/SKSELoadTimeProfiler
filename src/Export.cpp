@@ -1,0 +1,407 @@
+#include "Export.h"
+#include "Hooks.h"
+#include "Localization.h"
+#include "MessagingProfiler.h"
+#include "MessagingProfilerUI.h"
+#include "Settings.h"
+#include <fmt/printf.h>
+
+namespace {
+    struct SummaryMetrics {
+        double skseInitMs{-1.0};
+        double totalDllMs{0.0};
+        double totalEspMs{0.0};
+        double totalAllMs{0.0};
+    };
+
+    struct ExportRow {
+        std::string module;
+        std::string author;
+        std::string version;
+        bool isEsp{false};
+        double totalMs{0.0};
+        std::array<double, SKSE::MessagingInterface::kTotal> perMsg{};
+    };
+
+    struct EspMeta {
+        std::string author;
+        double version{-1.0};
+    };
+
+    struct SystemInfo {
+        std::string runtimeVariant;
+        std::string runtimeVersion;
+        std::string osNameVersion;
+        std::string cpuVendor;
+        std::string cpuModel;
+        std::string gpuList;
+    };
+
+    const char* PlaceholderText() {
+        return Localization::PlaceholderEmpty.empty() ? "-" : Localization::PlaceholderEmpty.c_str();
+    }
+
+    std::string FormatMs(const double value) {
+        if (value < 0.0) return {};
+        std::ostringstream os;
+        os << std::fixed << std::setprecision(3) << value;
+        return os.str();
+    }
+
+    std::string FormatVersion(const double value) {
+        if (value < 0.0) return PlaceholderText();
+        std::ostringstream os;
+        os << std::fixed << std::setprecision(3) << value;
+        return os.str();
+    }
+
+    std::string EscapeCsv(std::string_view value) {
+        bool needsQuote = false;
+        for (const char c : value) {
+            if (c == ',' || c == '"' || c == '\n' || c == '\r') {
+                needsQuote = true;
+                break;
+            }
+        }
+        if (!needsQuote) return std::string(value);
+
+        std::string out;
+        out.reserve(value.size() + 2);
+        out.push_back('"');
+        for (const char c : value) {
+            if (c == '"') out.push_back('"');
+            out.push_back(c);
+        }
+        out.push_back('"');
+        return out;
+    }
+
+    std::string SanitizeText(std::string value) {
+        for (char& c : value) {
+            if (c == '\t' || c == '\n' || c == '\r') c = ' ';
+        }
+        return value;
+    }
+
+    std::string MakeTimestampForFile() {
+        const auto now = std::chrono::system_clock::now();
+        const std::time_t nowTime = std::chrono::system_clock::to_time_t(now);
+        std::tm tm{};
+        if (localtime_s(&tm, &nowTime) != 0) return "19700101_000000";
+
+        std::ostringstream os;
+        os << std::put_time(&tm, "%Y%m%d_%H%M%S");
+        return os.str();
+    }
+
+    std::filesystem::path BuildExportPath(const Export::Format format) {
+        auto outDir = Settings::GetConfigPath().parent_path();
+        std::error_code ec;
+        std::filesystem::create_directories(outDir, ec);
+        const char* ext = format == Export::Format::Txt ? ".txt" : ".csv";
+        return outDir / ("LTP_summary_" + MakeTimestampForFile() + ext);
+    }
+
+    std::string TrimAscii(const std::string& value) {
+        const auto first = value.find_first_not_of(" \t\r\n");
+        if (first == std::string::npos) return {};
+        const auto last = value.find_last_not_of(" \t\r\n");
+        return value.substr(first, last - first + 1);
+    }
+
+    std::string JoinStrings(const std::vector<std::string>& parts, const std::string_view separator) {
+        if (parts.empty()) return {};
+        std::string out = parts.front();
+        for (std::size_t i = 1; i < parts.size(); ++i) {
+            out += separator;
+            out += parts[i];
+        }
+        return out;
+    }
+
+    std::string DetectWindowsName(const DWORD major, const DWORD minor, const DWORD build) {
+        if (major == 10) return build >= 22000 ? "Windows 11" : "Windows 10";
+        if (major == 6 && minor == 3) return "Windows 8.1";
+        if (major == 6 && minor == 2) return "Windows 8";
+        if (major == 6 && minor == 1) return "Windows 7";
+        if (major == 6 && minor == 0) return "Windows Vista";
+        if (major == 5 && minor == 1) return "Windows XP";
+        return "Windows";
+    }
+
+    std::string GetWindowsVersionString() {
+        DWORD major = 0;
+        DWORD minor = 0;
+        DWORD build = 0;
+
+        if (const auto ntdll = GetModuleHandleW(L"ntdll.dll")) {
+            using Fn = void(WINAPI*)(DWORD*, DWORD*, DWORD*);
+            if (const auto fn = reinterpret_cast<Fn>(GetProcAddress(ntdll, "RtlGetNtVersionNumbers"))) {
+                fn(&major, &minor, &build);
+                build &= 0xFFFF;
+            }
+        }
+
+        if (major == 0 && minor == 0 && build == 0) return PlaceholderText();
+        return fmt::format("{} v{}.{}.{}", DetectWindowsName(major, minor, build), major, minor, build);
+    }
+
+    std::string GetSkyrimRuntimeVersionString() {
+        const auto version = REL::Module::get().version();
+        return fmt::format("{}.{}.{}", version[0], version[1], version[2]);
+    }
+
+    std::string GetCpuVendorString() {
+        int regs[4]{};
+        __cpuid(regs, 0);
+
+        char vendor[13]{};
+        std::memcpy(vendor + 0, &regs[1], sizeof(int));
+        std::memcpy(vendor + 4, &regs[3], sizeof(int));
+        std::memcpy(vendor + 8, &regs[2], sizeof(int));
+        vendor[12] = '\0';
+
+        const auto result = TrimAscii(vendor);
+        return result.empty() ? PlaceholderText() : result;
+    }
+
+    std::string GetCpuModelString() {
+        int regs[4]{};
+        constexpr int kExtBaseLeaf = static_cast<int>(0x80000000u);
+        __cpuid(regs, kExtBaseLeaf);
+        const auto maxLeaf = static_cast<unsigned>(regs[0]);
+        if (maxLeaf < 0x80000004) return PlaceholderText();
+
+        std::array<char, 49> brand{};
+        for (unsigned i = 0; i < 3; ++i) {
+            __cpuid(regs, static_cast<int>(0x80000002u + i));
+            std::memcpy(brand.data() + i * 16, regs, 16);
+        }
+        brand.back() = '\0';
+
+        const auto model = TrimAscii(brand.data());
+        return model.empty() ? PlaceholderText() : model;
+    }
+
+    std::string DetectGpuVendor(std::string deviceId) {
+        std::transform(deviceId.begin(), deviceId.end(), deviceId.begin(),
+                       [](const unsigned char c) { return static_cast<char>(std::toupper(c)); });
+        if (deviceId.find("VEN_10DE") != std::string::npos) return "Nvidia";
+        if (deviceId.find("VEN_8086") != std::string::npos) return "Intel";
+        if (deviceId.find("VEN_1002") != std::string::npos || deviceId.find("VEN_1022") != std::string::npos)
+            return "AMD";
+        return "Unknown";
+    }
+
+    std::string GetGpuListString() {
+        std::vector<std::string> gpus;
+        DISPLAY_DEVICEA adapter{};
+        adapter.cb = sizeof(adapter);
+
+        for (DWORD index = 0; EnumDisplayDevicesA(nullptr, index, &adapter, 0) != FALSE; ++index) {
+            auto model = TrimAscii(adapter.DeviceString);
+            if (model.empty()) model = PlaceholderText();
+
+            const auto vendor = DetectGpuVendor(adapter.DeviceID);
+            gpus.push_back(vendor == "Unknown" ? model : fmt::format("{} {}", vendor, model));
+
+            adapter = {};
+            adapter.cb = sizeof(adapter);
+        }
+
+        if (gpus.empty()) return PlaceholderText();
+        return JoinStrings(gpus, "; ");
+    }
+
+    SystemInfo BuildSystemInfo() {
+        SystemInfo info;
+        info.runtimeVariant = REL::Module::IsVR() ? "VR" : "SSE";
+        info.runtimeVersion = GetSkyrimRuntimeVersionString();
+        info.osNameVersion = GetWindowsVersionString();
+        info.cpuVendor = GetCpuVendorString();
+        info.cpuModel = GetCpuModelString();
+        info.gpuList = GetGpuListString();
+        return info;
+    }
+
+    SummaryMetrics BuildSummaryMetrics(const std::vector<MessagingProfiler::TaggedRow>& taggedRows) {
+        SummaryMetrics metrics;
+        for (const auto& row : taggedRows) {
+            if (row.kind == MessagingProfiler::SourceKind::ESP) {
+                metrics.totalEspMs += row.totalMs;
+            } else {
+                for (const double value : row.perMsg)
+                    if (value >= 1.0) metrics.totalDllMs += value;
+            }
+        }
+
+        metrics.skseInitMs = MCP::loadTimeMs.load(std::memory_order_relaxed);
+        if (metrics.skseInitMs >= 0.0) metrics.totalDllMs += metrics.skseInitMs;
+        metrics.totalAllMs = metrics.totalDllMs + metrics.totalEspMs;
+        return metrics;
+    }
+
+    std::unordered_map<std::string, EspMeta> BuildEspMetaMap() {
+        std::unordered_map<std::string, EspMeta> out;
+        for (const auto& entry : ESPProfiling::SnapshotEntries()) {
+            out[entry.name] = EspMeta{.author = entry.author, .version = entry.version};
+        }
+        return out;
+    }
+
+    std::string LookupDllAuthor(const std::string& module) {
+        auto it = MessagingProfilerUI::g_metaCache.find(module);
+        if (it == MessagingProfilerUI::g_metaCache.end())
+            it = MessagingProfilerUI::g_metaCache.emplace(module, MessagingProfilerUI::GetDllMeta(module)).first;
+        return it->second.author.empty() ? PlaceholderText() : it->second.author;
+    }
+
+    std::string LookupDllVersion(const std::string& module) {
+        auto it = MessagingProfilerUI::g_metaCache.find(module);
+        if (it == MessagingProfilerUI::g_metaCache.end())
+            it = MessagingProfilerUI::g_metaCache.emplace(module, MessagingProfilerUI::GetDllMeta(module)).first;
+        return it->second.version.empty() ? PlaceholderText() : it->second.version;
+    }
+
+    std::vector<ExportRow> BuildExportRows(const std::vector<MessagingProfiler::TaggedRow>& taggedRows) {
+        std::vector<ExportRow> rows;
+        rows.reserve(taggedRows.size());
+        const auto espMeta = BuildEspMetaMap();
+
+        for (const auto& row : taggedRows) {
+            ExportRow out;
+            out.module = row.module;
+            out.isEsp = row.kind == MessagingProfiler::SourceKind::ESP;
+            out.totalMs = row.totalMs;
+            out.perMsg = row.perMsg;
+            if (out.isEsp) {
+                auto it = espMeta.find(out.module);
+                if (it != espMeta.end()) {
+                    out.author = it->second.author.empty() ? PlaceholderText() : it->second.author;
+                    out.version = FormatVersion(it->second.version);
+                } else {
+                    out.author = PlaceholderText();
+                    out.version = PlaceholderText();
+                }
+            } else {
+                out.author = LookupDllAuthor(out.module);
+                out.version = LookupDllVersion(out.module);
+            }
+            rows.push_back(std::move(out));
+        }
+
+        return rows;
+    }
+
+    bool WriteCsv(const std::filesystem::path& path, const SummaryMetrics& summary, const SystemInfo& systemInfo,
+                  const std::vector<std::string_view>& messageNames, const std::vector<ExportRow>& rows) {
+        std::ofstream out(path, std::ios::trunc);
+        if (!out.is_open()) return false;
+
+        out << "summary_key,summary_ms\n";
+        out << "skse_init_time_heuristic_ms," << FormatMs(summary.skseInitMs) << "\n";
+        out << "total_dll_time_ms," << FormatMs(summary.totalDllMs) << "\n";
+        out << "total_esp_time_ms," << FormatMs(summary.totalEspMs) << "\n";
+        out << "total_time_ms," << FormatMs(summary.totalAllMs) << "\n\n";
+
+        out << "system_key,system_value\n";
+        out << "skyrim_runtime_variant," << EscapeCsv(systemInfo.runtimeVariant) << "\n";
+        out << "skyrim_runtime_version," << EscapeCsv(systemInfo.runtimeVersion) << "\n";
+        out << "os_name_version," << EscapeCsv(systemInfo.osNameVersion) << "\n";
+        out << "cpu_vendor," << EscapeCsv(systemInfo.cpuVendor) << "\n";
+        out << "cpu_model," << EscapeCsv(systemInfo.cpuModel) << "\n";
+        out << "gpu_list," << EscapeCsv(systemInfo.gpuList) << "\n\n";
+
+        out << "module,author,version,type,total_ms";
+        for (const auto& name : messageNames) out << ',' << EscapeCsv(std::string(name) + "_ms");
+        out << "\n";
+
+        for (const auto& row : rows) {
+            out << EscapeCsv(row.module) << ',';
+            out << EscapeCsv(row.author) << ',';
+            out << EscapeCsv(row.version) << ',';
+            out << (row.isEsp ? "ESP" : "DLL") << ',';
+            out << FormatMs(row.totalMs);
+            for (double value : row.perMsg) {
+                if (row.isEsp) value = 0.0;
+                out << ',' << FormatMs(value);
+            }
+            out << "\n";
+        }
+
+        return true;
+    }
+
+    bool WriteTxt(const std::filesystem::path& path, const SummaryMetrics& summary, const SystemInfo& systemInfo,
+                  const std::vector<std::string_view>& messageNames, const std::vector<ExportRow>& rows) {
+        std::ofstream out(path, std::ios::trunc);
+        if (!out.is_open()) return false;
+
+        out << "Summary\n";
+        out << "skse_init_time_heuristic_ms: " << FormatMs(summary.skseInitMs) << "\n";
+        out << "total_dll_time_ms: " << FormatMs(summary.totalDllMs) << "\n";
+        out << "total_esp_time_ms: " << FormatMs(summary.totalEspMs) << "\n";
+        out << "total_time_ms: " << FormatMs(summary.totalAllMs) << "\n\n";
+
+        out << "System\n";
+        out << "skyrim_runtime_variant: " << SanitizeText(systemInfo.runtimeVariant) << "\n";
+        out << "skyrim_runtime_version: " << SanitizeText(systemInfo.runtimeVersion) << "\n";
+        out << "os_name_version: " << SanitizeText(systemInfo.osNameVersion) << "\n";
+        out << "cpu_vendor: " << SanitizeText(systemInfo.cpuVendor) << "\n";
+        out << "cpu_model: " << SanitizeText(systemInfo.cpuModel) << "\n";
+        out << "gpu_list: " << SanitizeText(systemInfo.gpuList) << "\n\n";
+
+        out << "module\tauthor\tversion\ttype\ttotal_ms";
+        for (const auto& name : messageNames) out << '\t' << name << "_ms";
+        out << "\n";
+
+        for (const auto& row : rows) {
+            out << SanitizeText(row.module) << '\t';
+            out << SanitizeText(row.author) << '\t';
+            out << SanitizeText(row.version) << '\t';
+            out << (row.isEsp ? "ESP" : "DLL") << '\t';
+            out << FormatMs(row.totalMs);
+            for (double value : row.perMsg) {
+                if (row.isEsp) value = 0.0;
+                out << '\t' << FormatMs(value);
+            }
+            out << "\n";
+        }
+
+        return true;
+    }
+
+    std::string BuildSuccessStatus(const std::filesystem::path& path) {
+        if (Localization::ExportStatusSuccess.empty()) return path.string();
+
+        try {
+            return fmt::sprintf(Localization::ExportStatusSuccess, path.string().c_str());
+        } catch (const fmt::format_error& e) {
+            logger::warn("[Profiler] Invalid export success format '{}': {}", Localization::ExportStatusSuccess,
+                         e.what());
+            return path.string();
+        }
+    }
+}
+
+bool Export::WriteSnapshot(const Format format, std::string& statusMessage) {
+    const auto taggedRows = MessagingProfiler::GetTaggedRows();
+    const auto summary = BuildSummaryMetrics(taggedRows);
+    const auto systemInfo = BuildSystemInfo();
+    const auto exportRows = BuildExportRows(taggedRows);
+    const auto messageNames = MessagingProfiler::GetMessageTypeNames();
+    const auto path = BuildExportPath(format);
+
+    const bool ok = format == Format::Txt
+                        ? WriteTxt(path, summary, systemInfo, messageNames, exportRows)
+                        : WriteCsv(path, summary, systemInfo, messageNames, exportRows);
+
+    if (ok) {
+        statusMessage = BuildSuccessStatus(path);
+        return true;
+    }
+
+    statusMessage = Localization::ExportStatusFailed;
+    logger::error("[Profiler] Failed to export profiling snapshot to '{}'", path.string());
+    return false;
+}
