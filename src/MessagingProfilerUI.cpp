@@ -1,7 +1,7 @@
 #include "MessagingProfilerUI.h"
+#include "ESPProfiling.h"
 #include "MCP.h"
 #include "MessagingProfiler.h"
-#include "Hooks.h"
 #include "Export.h"
 #include "Settings.h"
 #include "Utils.h"
@@ -367,8 +367,12 @@ namespace {
     std::vector<std::size_t> BuildActiveSelections(const MessagingProfilerUI::State& s) {
         std::vector<std::size_t> active;
         active.reserve(s.selected.size());
+        constexpr std::size_t dataLoadedIndex = SKSE::MessagingInterface::kDataLoaded;
+        if (dataLoadedIndex < s.selected.size() && s.selected[dataLoadedIndex]) {
+            active.push_back(dataLoadedIndex);
+        }
         for (std::size_t i = 0; i < s.selected.size(); ++i)
-            if (s.selected[i]) active.push_back(i);
+            if (s.selected[i] && i != dataLoadedIndex) active.push_back(i);
         return active;
     }
 

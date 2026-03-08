@@ -3,6 +3,7 @@ set(sources ${sources}
 	src/Utils.cpp
 	src/Settings.cpp
 	src/Hooks.cpp
+	src/ESPProfiling.cpp
 	src/MCP.cpp
 	src/Events.cpp
 	src/Localization.cpp

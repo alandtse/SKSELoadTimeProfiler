@@ -1,5 +1,5 @@
 #include "Export.h"
-#include "Hooks.h"
+#include "ESPProfiling.h"
 #include "Localization.h"
 #include "MessagingProfiler.h"
 #include "MessagingProfilerUI.h"

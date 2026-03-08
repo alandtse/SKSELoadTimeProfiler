@@ -1,6 +1,6 @@
 #include "Events.h"
+#include "ESPProfiling.h"
 #include "Export.h"
-#include "Hooks.h"
 #include "MessagingProfiler.h"
 #include "REX/REX/Singleton.h"
 
