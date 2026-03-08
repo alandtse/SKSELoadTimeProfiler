@@ -4,6 +4,7 @@ namespace Localization {
     inline std::string SectionUtilities;
     inline std::string MenuItemLoadTimeProfiler;
     inline std::string Summary;
+    inline std::string System;
     inline std::string SkseInitTimeHeuristic;
     inline std::string TotalDllTime;
     inline std::string TotalEspTime;
@@ -30,8 +31,12 @@ namespace Localization {
     inline std::string ExportButton;
     inline std::string ExportStatusSuccess;
     inline std::string ExportStatusFailed;
-    inline std::string FilterDll;
-    inline std::string FilterEsp;
+    inline std::string ExportSkyrimRuntimeVariant;
+    inline std::string ExportSkyrimRuntimeVersion;
+    inline std::string ExportOsNameVersion;
+    inline std::string ExportCpuVendor;
+    inline std::string ExportCpuModel;
+    inline std::string ExportGpuList;
     inline std::string TypeDll;
     inline std::string TypeEsp;
     inline std::string NoMessageTypesSelected;
@@ -41,9 +46,9 @@ namespace Localization {
     inline std::string ColumnType;
     inline std::string TotalsRowLabel;
     inline std::string PlaceholderEmpty;
-    inline std::string TooltipAuthor;
-    inline std::string TooltipVersion;
-    inline std::string TooltipLicense;
+    inline std::string Author;
+    inline std::string Version;
+    inline std::string License;
     inline std::string TooltipNoVersionInfo;
     inline std::string FormatSeconds;
     inline std::string FormatMilliseconds;

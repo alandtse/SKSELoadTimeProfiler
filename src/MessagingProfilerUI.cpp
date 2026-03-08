@@ -1,7 +1,7 @@
 #include "MessagingProfilerUI.h"
+#include "ESPProfiling.h"
 #include "MCP.h"
 #include "MessagingProfiler.h"
-#include "Hooks.h"
 #include "Export.h"
 #include "Settings.h"
 #include "Utils.h"
@@ -190,7 +190,7 @@ namespace {
         ImGuiMCP::ImGui::SameLine();
 
         bool dll = showDllEntries;
-        const auto dllLabel = Localization::MakeLabel(Localization::FilterDll, "filter-dll");
+        const auto dllLabel = Localization::MakeLabel(Localization::TypeDll, "filter-dll");
         if (ImGuiMCP::ImGui::Checkbox(dllLabel.c_str(), &dll)) {
             showDllEntries = dll;
             Settings::Save();
@@ -198,7 +198,7 @@ namespace {
 
         ImGuiMCP::ImGui::SameLine();
         bool esp = showEspEntries;
-        const auto espLabel = Localization::MakeLabel(Localization::FilterEsp, "filter-esp");
+        const auto espLabel = Localization::MakeLabel(Localization::TypeEsp, "filter-esp");
         if (ImGuiMCP::ImGui::Checkbox(espLabel.c_str(), &esp)) {
             showEspEntries = esp;
             Settings::Save();
@@ -367,8 +367,12 @@ namespace {
     std::vector<std::size_t> BuildActiveSelections(const MessagingProfilerUI::State& s) {
         std::vector<std::size_t> active;
         active.reserve(s.selected.size());
+        constexpr std::size_t dataLoadedIndex = SKSE::MessagingInterface::kDataLoaded;
+        if (dataLoadedIndex < s.selected.size() && s.selected[dataLoadedIndex]) {
+            active.push_back(dataLoadedIndex);
+        }
         for (std::size_t i = 0; i < s.selected.size(); ++i)
-            if (s.selected[i]) active.push_back(i);
+            if (s.selected[i] && i != dataLoadedIndex) active.push_back(i);
         return active;
     }
 
@@ -539,19 +543,16 @@ namespace {
                                 ImGuiMCP::ImGui::TextUnformatted(e.module.c_str());
                                 if (it->second.ok) {
                                     if (!it->second.author.empty()) {
-                                        const auto text =
-                                            FormatLocalized(Localization::TooltipAuthor, it->second.author.c_str());
-                                        ImGuiMCP::ImGui::TextUnformatted(text.c_str());
+                                        ImGuiMCP::ImGui::Text("%s: %s", Localization::Author.c_str(),
+                                                              it->second.author.c_str());
                                     }
                                     if (!it->second.version.empty()) {
-                                        const auto text =
-                                            FormatLocalized(Localization::TooltipVersion, it->second.version.c_str());
-                                        ImGuiMCP::ImGui::TextUnformatted(text.c_str());
+                                        ImGuiMCP::ImGui::Text("%s: %s", Localization::Version.c_str(),
+                                                              it->second.version.c_str());
                                     }
                                     if (!it->second.license.empty()) {
-                                        const auto text =
-                                            FormatLocalized(Localization::TooltipLicense, it->second.license.c_str());
-                                        ImGuiMCP::ImGui::TextUnformatted(text.c_str());
+                                        ImGuiMCP::ImGui::Text("%s: %s", Localization::License.c_str(),
+                                                              it->second.license.c_str());
                                     }
                                 } else {
                                     ImGuiMCP::ImGui::TextUnformatted(Localization::TooltipNoVersionInfo.c_str());
