@@ -25,7 +25,6 @@ namespace Localization {
     inline std::string HeaderMessageTypes;
     inline std::string SearchLabel;
     inline std::string SearchHint;
-    inline std::string ExportFormatLabel;
     inline std::string ExportFormatCsv;
     inline std::string ExportFormatTxt;
     inline std::string ExportButton;
