@@ -367,28 +367,30 @@ namespace {
         const auto totals = BuildExportTotals(rows, msgIndices);
 
         const std::vector<std::pair<std::string, std::string>> summaryRows = {
-            {"skse_init_time_heuristic_s", FormatSeconds(summary.skseInitMs)},
-            {"total_dll_time_s", FormatSeconds(summary.totalDllMs)},
-            {"total_esp_time_s", FormatSeconds(summary.totalEspMs)},
-            {"total_time_s", FormatSeconds(summary.totalAllMs)},
-            {"dll_count", std::to_string(summary.dllCount)},
-            {"esp_count", std::to_string(summary.espCount)},
+            {Localization::SkseInitTimeHeuristic, FormatSeconds(summary.skseInitMs)},
+            {Localization::TotalDllTime, FormatSeconds(summary.totalDllMs)},
+            {Localization::TotalEspTime, FormatSeconds(summary.totalEspMs)},
+            {Localization::TotalTime, FormatSeconds(summary.totalAllMs)},
+            {fmt::format("{} (#)", Localization::TypeDll), std::to_string(summary.dllCount)},
+            {fmt::format("{} (#)", Localization::TypeEsp), std::to_string(summary.espCount)},
         };
 
         const std::vector<std::pair<std::string, std::string>> systemRows = {
-            {"skyrim_runtime_variant", EscapeCsv(systemInfo.runtimeVariant)},
-            {"skyrim_runtime_version", EscapeCsv(systemInfo.runtimeVersion)},
-            {"os_name_version", EscapeCsv(systemInfo.osNameVersion)},
-            {"cpu_vendor", EscapeCsv(systemInfo.cpuVendor)},
-            {"cpu_model", EscapeCsv(systemInfo.cpuModel)},
-            {"gpu_list", EscapeCsv(systemInfo.gpuList)},
+            {Localization::ExportSkyrimRuntimeVariant, EscapeCsv(systemInfo.runtimeVariant)},
+            {Localization::ExportSkyrimRuntimeVersion, EscapeCsv(systemInfo.runtimeVersion)},
+            {Localization::ExportOsNameVersion, EscapeCsv(systemInfo.osNameVersion)},
+            {Localization::ExportCpuVendor, EscapeCsv(systemInfo.cpuVendor)},
+            {Localization::ExportCpuModel, EscapeCsv(systemInfo.cpuModel)},
+            {Localization::ExportGpuList, EscapeCsv(systemInfo.gpuList)},
         };
 
-        out << "summary_key,summary_s,system_key,system_value\n";
+        out << EscapeCsv(Localization::Summary) << ','
+            << EscapeCsv(Localization::TotalSecondsLabel) << ','
+            << EscapeCsv(Localization::System) << ",\n";
         const auto rowCount = std::max(summaryRows.size(), systemRows.size());
         for (std::size_t i = 0; i < rowCount; ++i) {
             if (i < summaryRows.size()) {
-                out << summaryRows[i].first << ',' << summaryRows[i].second;
+                out << EscapeCsv(summaryRows[i].first) << ',' << summaryRows[i].second;
             } else {
                 out << ',';
             }
@@ -396,7 +398,7 @@ namespace {
             out << ',';
 
             if (i < systemRows.size()) {
-                out << systemRows[i].first << ',' << systemRows[i].second;
+                out << EscapeCsv(systemRows[i].first) << ',' << systemRows[i].second;
             } else {
                 out << ',';
             }
@@ -404,8 +406,10 @@ namespace {
         }
         out << "\n";
 
-        out << "module,author,version,type,total_s";
-        for (const auto idx : msgIndices) out << ',' << EscapeCsv(std::string(messageNames[idx]) + "_s");
+        out << EscapeCsv(Localization::ColumnModule) << ',' << EscapeCsv(Localization::Author) << ','
+            << EscapeCsv(Localization::Version) << ',' << EscapeCsv(Localization::ColumnType)
+            << ',' << EscapeCsv(Localization::TotalSecondsLabel);
+        for (const auto idx : msgIndices) out << ',' << EscapeCsv(Localization::MessageTypeLabel(idx));
         out << "\n";
 
         out << EscapeCsv(fmt::format("{} ({})", Localization::TotalsRowLabel, totals.rowCount)) << ',';
@@ -450,20 +454,20 @@ namespace {
         });
 
         out << Localization::Summary << "\n";
-        out << "skse_init_time_heuristic_s: " << FormatSeconds(summary.skseInitMs) << "\n";
-        out << "total_dll_time_s: " << FormatSeconds(summary.totalDllMs) << "\n";
-        out << "total_esp_time_s: " << FormatSeconds(summary.totalEspMs) << "\n";
-        out << "total_time_s: " << FormatSeconds(summary.totalAllMs) << "\n";
-        out << "dll_count: " << summary.dllCount << "\n";
-        out << "esp_count: " << summary.espCount << "\n\n";
+        out << Localization::SkseInitTimeHeuristic << ": " << FormatSeconds(summary.skseInitMs) << "\n";
+        out << Localization::TotalDllTime << ": " << FormatSeconds(summary.totalDllMs) << "\n";
+        out << Localization::TotalEspTime << ": " << FormatSeconds(summary.totalEspMs) << "\n";
+        out << Localization::TotalTime << ": " << FormatSeconds(summary.totalAllMs) << "\n";
+        out << Localization::TypeDll << " (#): " << summary.dllCount << "\n";
+        out << Localization::TypeEsp << " (#): " << summary.espCount << "\n\n";
 
-        out << "System\n";
-        out << "skyrim_runtime_variant: " << SanitizeText(systemInfo.runtimeVariant) << "\n";
-        out << "skyrim_runtime_version: " << SanitizeText(systemInfo.runtimeVersion) << "\n";
-        out << "os_name_version: " << SanitizeText(systemInfo.osNameVersion) << "\n";
-        out << "cpu_vendor: " << SanitizeText(systemInfo.cpuVendor) << "\n";
-        out << "cpu_model: " << SanitizeText(systemInfo.cpuModel) << "\n";
-        out << "gpu_list: " << SanitizeText(systemInfo.gpuList) << "\n\n";
+        out << Localization::System << "\n";
+        out << Localization::ExportSkyrimRuntimeVariant << ": " << SanitizeText(systemInfo.runtimeVariant) << "\n";
+        out << Localization::ExportSkyrimRuntimeVersion << ": " << SanitizeText(systemInfo.runtimeVersion) << "\n";
+        out << Localization::ExportOsNameVersion << ": " << SanitizeText(systemInfo.osNameVersion) << "\n";
+        out << Localization::ExportCpuVendor << ": " << SanitizeText(systemInfo.cpuVendor) << "\n";
+        out << Localization::ExportCpuModel << ": " << SanitizeText(systemInfo.cpuModel) << "\n";
+        out << Localization::ExportGpuList << ": " << SanitizeText(systemInfo.gpuList) << "\n\n";
 
         constexpr std::size_t kMaxModuleWidth = 48;
         constexpr std::size_t kMaxAuthorWidth = 28;
@@ -471,13 +475,13 @@ namespace {
 
         std::vector<std::string> msgHeaders;
         msgHeaders.reserve(msgIndices.size());
-        for (const auto idx : msgIndices) msgHeaders.push_back(std::string(messageNames[idx]) + "_s");
+        for (const auto idx : msgIndices) msgHeaders.push_back(Localization::MessageTypeLabel(idx));
 
-        std::size_t moduleWidth = std::string_view("module").size();
-        std::size_t authorWidth = std::string_view("author").size();
-        std::size_t versionWidth = std::string_view("version").size();
-        std::size_t typeWidth = std::string_view("type").size();
-        std::size_t totalWidth = std::string_view("total_s").size();
+        std::size_t moduleWidth = Localization::ColumnModule.size();
+        std::size_t authorWidth = Localization::Author.size();
+        std::size_t versionWidth = Localization::Version.size();
+        std::size_t typeWidth = Localization::ColumnType.size();
+        std::size_t totalWidth = Localization::TotalSecondsLabel.size();
         std::vector<std::size_t> msgWidths(msgHeaders.size(), 0);
         for (std::size_t i = 0; i < msgHeaders.size(); ++i) msgWidths[i] = msgHeaders[i].size();
 
@@ -547,11 +551,11 @@ namespace {
         }
 
         out << std::left
-            << std::setw(static_cast<int>(moduleWidth)) << "module" << "  "
-            << std::setw(static_cast<int>(authorWidth)) << "author" << "  "
-            << std::setw(static_cast<int>(versionWidth)) << "version" << "  "
-            << std::setw(static_cast<int>(typeWidth)) << "type" << "  "
-            << std::right << std::setw(static_cast<int>(totalWidth)) << "total_s";
+            << std::setw(static_cast<int>(moduleWidth)) << Localization::ColumnModule << "  "
+            << std::setw(static_cast<int>(authorWidth)) << Localization::Author << "  "
+            << std::setw(static_cast<int>(versionWidth)) << Localization::Version << "  "
+            << std::setw(static_cast<int>(typeWidth)) << Localization::ColumnType << "  "
+            << std::right << std::setw(static_cast<int>(totalWidth)) << Localization::TotalSecondsLabel;
         for (std::size_t i = 0; i < msgHeaders.size(); ++i) {
             out << "  " << std::setw(static_cast<int>(msgWidths[i])) << msgHeaders[i];
         }

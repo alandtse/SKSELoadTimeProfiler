@@ -543,19 +543,16 @@ namespace {
                                 ImGuiMCP::ImGui::TextUnformatted(e.module.c_str());
                                 if (it->second.ok) {
                                     if (!it->second.author.empty()) {
-                                        const auto text =
-                                            FormatLocalized(Localization::TooltipAuthor, it->second.author.c_str());
-                                        ImGuiMCP::ImGui::TextUnformatted(text.c_str());
+                                        ImGuiMCP::ImGui::Text("%s: %s", Localization::Author.c_str(),
+                                                              it->second.author.c_str());
                                     }
                                     if (!it->second.version.empty()) {
-                                        const auto text =
-                                            FormatLocalized(Localization::TooltipVersion, it->second.version.c_str());
-                                        ImGuiMCP::ImGui::TextUnformatted(text.c_str());
+                                        ImGuiMCP::ImGui::Text("%s: %s", Localization::Version.c_str(),
+                                                              it->second.version.c_str());
                                     }
                                     if (!it->second.license.empty()) {
-                                        const auto text =
-                                            FormatLocalized(Localization::TooltipLicense, it->second.license.c_str());
-                                        ImGuiMCP::ImGui::TextUnformatted(text.c_str());
+                                        ImGuiMCP::ImGui::Text("%s: %s", Localization::License.c_str(),
+                                                              it->second.license.c_str());
                                     }
                                 } else {
                                     ImGuiMCP::ImGui::TextUnformatted(Localization::TooltipNoVersionInfo.c_str());

@@ -2,6 +2,7 @@
   "$ltpSectionUtilities": "Utilities",
   "$ltpMenuItem": "Load Time Profiler",
   "$ltpSummary": "Summary",
+  "$ltpSystem": "System",
   "$ltpSkseInitTimeHeuristic": "SKSE init time (heuristic)",
   "$ltpTotalDllTime": "Total DLL time",
   "$ltpTotalEspTime": "Total ESP time",
@@ -28,6 +29,12 @@
   "$ltpExportButton": "Export",
   "$ltpExportStatusSuccess": "Exported to %s",
   "$ltpExportStatusFailed": "Export failed",
+  "$ltpExportSkyrimRuntimeVariant": "skyrim_runtime_variant",
+  "$ltpExportSkyrimRuntimeVersion": "skyrim_runtime_version",
+  "$ltpExportOsNameVersion": "os_name_version",
+  "$ltpExportCpuVendor": "cpu_vendor",
+  "$ltpExportCpuModel": "cpu_model",
+  "$ltpExportGpuList": "gpu_list",
   "$ltpTypeDll": "DLL",
   "$ltpTypeEsp": "ESP",
   "$ltpNoMessageTypesSelected": "No message types selected.",
@@ -37,9 +44,9 @@
   "$ltpColumnType": "Type",
   "$ltpTotalsRow": "<Totals>",
   "$ltpPlaceholderEmpty": "-",
-  "$ltpTooltipAuthor": "Author: %s",
-  "$ltpTooltipVersion": "Version: %s",
-  "$ltpTooltipLicense": "License: %s",
+  "$ltpAuthor": "Author",
+  "$ltpVersion": "Version",
+  "$ltpLicense": "License",
   "$ltpTooltipNoVersionInfo": "(no version info)",
   "$ltpFormatSeconds": "%.2f s",
   "$ltpFormatMilliseconds": "%.3f ms",
@@ -63,3 +70,4 @@
   "$ltpTipNewGame": "When starting a new game.",
   "$ltpTipDataLoaded": "After data and plugins are loaded."
 }
+

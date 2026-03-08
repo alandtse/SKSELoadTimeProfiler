@@ -39,6 +39,7 @@ void Localization::Load() {
     SectionUtilities = GetOrWarn(doc, "$ltpSectionUtilities");
     MenuItemLoadTimeProfiler = GetOrWarn(doc, "$ltpMenuItem");
     Summary = GetOrWarn(doc, "$ltpSummary");
+    System = GetOrWarn(doc, "$ltpSystem");
     SkseInitTimeHeuristic = GetOrWarn(doc, "$ltpSkseInitTimeHeuristic");
     TotalDllTime = GetOrWarn(doc, "$ltpTotalDllTime");
     TotalEspTime = GetOrWarn(doc, "$ltpTotalEspTime");
@@ -65,6 +66,12 @@ void Localization::Load() {
     ExportButton = GetOrWarn(doc, "$ltpExportButton");
     ExportStatusSuccess = GetOrWarn(doc, "$ltpExportStatusSuccess");
     ExportStatusFailed = GetOrWarn(doc, "$ltpExportStatusFailed");
+    ExportSkyrimRuntimeVariant = GetOrWarn(doc, "$ltpExportSkyrimRuntimeVariant");
+    ExportSkyrimRuntimeVersion = GetOrWarn(doc, "$ltpExportSkyrimRuntimeVersion");
+    ExportOsNameVersion = GetOrWarn(doc, "$ltpExportOsNameVersion");
+    ExportCpuVendor = GetOrWarn(doc, "$ltpExportCpuVendor");
+    ExportCpuModel = GetOrWarn(doc, "$ltpExportCpuModel");
+    ExportGpuList = GetOrWarn(doc, "$ltpExportGpuList");
     TypeDll = GetOrWarn(doc, "$ltpTypeDll");
     TypeEsp = GetOrWarn(doc, "$ltpTypeEsp");
     NoMessageTypesSelected = GetOrWarn(doc, "$ltpNoMessageTypesSelected");
@@ -74,9 +81,9 @@ void Localization::Load() {
     ColumnType = GetOrWarn(doc, "$ltpColumnType");
     TotalsRowLabel = GetOrWarn(doc, "$ltpTotalsRow");
     PlaceholderEmpty = GetOrWarn(doc, "$ltpPlaceholderEmpty");
-    TooltipAuthor = GetOrWarn(doc, "$ltpTooltipAuthor");
-    TooltipVersion = GetOrWarn(doc, "$ltpTooltipVersion");
-    TooltipLicense = GetOrWarn(doc, "$ltpTooltipLicense");
+    Author = GetOrWarn(doc, "$ltpAuthor");
+    Version = GetOrWarn(doc, "$ltpVersion");
+    License = GetOrWarn(doc, "$ltpLicense");
     TooltipNoVersionInfo = GetOrWarn(doc, "$ltpTooltipNoVersionInfo");
     FormatSeconds = GetOrWarn(doc, "$ltpFormatSeconds");
     FormatMilliseconds = GetOrWarn(doc, "$ltpFormatMilliseconds");
