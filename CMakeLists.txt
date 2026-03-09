@@ -46,6 +46,7 @@ add_subdirectory("$ENV{COMMONLIB_SSE_FOLDER}" ${CMAKE_CURRENT_BINARY_DIR}/_deps/
 get_target_property(COMMONLIB_SRC_DIR CommonLibSSE SOURCE_DIR)
 
 find_path(SKSE_MCP_INCLUDE_DIRS "SKSEMCP/utils.hpp")
+find_package(skyrimvresl CONFIG REQUIRED)
 
 file(
   GLOB_RECURSE
@@ -98,6 +99,7 @@ elseif (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 endif()
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE IS_HOST_PLUGIN)
+target_link_libraries(${PROJECT_NAME} PRIVATE SkyrimVRESL::CommonLib)
 
 set(wildlander_output false)
 set(steam_owrt_output false)
