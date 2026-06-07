@@ -27,6 +27,7 @@ namespace {
     std::vector<LoadProfiling::LoadRecord> g_history;
     std::atomic<uint64_t> g_order{0};
     bool g_seenMainMenu{false};  // at the Main Menu and not yet entered the game (cold start pending)
+    LoadProfiling::LoadFinalizedFn g_onFinalized{nullptr};  // optional consumer hook (devbench bridge)
 
     // In-progress Main Menu -> gameplay transition (guarded by g_mutex): save (kPreLoadGame),
     // new game (kNewGame), or a menu `coc` (neither). In-game cell loads fire no message.
@@ -149,6 +150,7 @@ namespace {
         if (g_cur.coldStart) g_seenMainMenu = false;  // we have entered the game
         g_cur = InProgress{};
         if (isSave) ExportSnapshotLocked();
+        if (g_onFinalized) g_onFinalized(g_history.back());  // notify consumers (devbench event)
     }
 
     // Caller holds g_mutex. Begin tracking if not already, preserving an existing menu-open.
@@ -299,4 +301,9 @@ std::vector<LoadProfiling::LoadRecord> LoadProfiling::Snapshot() {
         out.push_back(std::move(rec));
     }
     return out;
+}
+
+void LoadProfiling::SetLoadFinalizedCallback(LoadFinalizedFn cb) {
+    std::lock_guard lk(g_mutex);
+    g_onFinalized = cb;
 }

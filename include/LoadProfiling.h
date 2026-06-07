@@ -49,4 +49,10 @@ namespace LoadProfiling {
     void OnGlobalDataEnd();
 
     std::vector<LoadRecord> Snapshot();
+
+    // Optional callback fired when a load is finalized, with the just-recorded entry.
+    // Runs on the game thread under the profiler lock; the callback must not call back
+    // into LoadProfiling. Used by the devbench bridge to emit an event. nullptr clears it.
+    using LoadFinalizedFn = void (*)(const LoadRecord&);
+    void SetLoadFinalizedCallback(LoadFinalizedFn cb);
 }

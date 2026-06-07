@@ -12,4 +12,8 @@ namespace Export {
     };
 
     bool WriteSnapshot(Format format, std::string& statusMessage);
+
+    // Path of the most recently written JSON snapshot (empty until one is written).
+    // Lets consumers point at the full Perfetto-ready trace, not just the summary.
+    const std::string& LastJsonPath();
 }

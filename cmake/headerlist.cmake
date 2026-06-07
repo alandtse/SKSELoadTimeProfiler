@@ -7,6 +7,7 @@ set(headers ${headers}
 	include/ChangeFormProfiling.h
 	include/ESPProfiling.h
 	include/LoadProfiling.h
+	include/DevBenchBridge.h
 	include/MCP.h
 	include/Events.h
 	include/Export.h

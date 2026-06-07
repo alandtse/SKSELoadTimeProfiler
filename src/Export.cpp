@@ -14,6 +14,8 @@
 #include <fmt/printf.h>
 
 namespace {
+    std::string g_lastJsonPath;  // most recent JSON snapshot path (Export::LastJsonPath)
+
     struct SummaryMetrics {
         double skseInitMs{-1.0};
         double totalDllMs{0.0};
@@ -1066,6 +1068,7 @@ bool Export::WriteSnapshot(const Format format, std::string& statusMessage) {
                         : WriteCsv(path, summary, systemInfo, messageNames, exportRows);
 
     if (ok) {
+        if (format == Format::Json) g_lastJsonPath = path.string();
         PruneOldExports(path.parent_path());
         statusMessage = BuildSuccessStatus(path);
         return true;
@@ -1075,3 +1078,5 @@ bool Export::WriteSnapshot(const Format format, std::string& statusMessage) {
     logger::error("[Profiler] Failed to export profiling snapshot to '{}'", path.string());
     return false;
 }
+
+const std::string& Export::LastJsonPath() { return g_lastJsonPath; }

@@ -51,6 +51,11 @@ set(ENABLE_SKYRIM_AE ON CACHE BOOL " " FORCE)
 set(ENABLE_SKYRIM_VR ON CACHE BOOL " " FORCE)
 set(BUILD_TESTS OFF CACHE BOOL " " FORCE)
 
+# Expose load-profiler stats as a devbench `inspect kind=loadprofiler` extension
+# (devbench 1.5.0+). Uses the vendored MIT devbench-api (extern/devbench-api);
+# runtime no-op when no devbench host is present or it predates 1.5.0.
+option(DEVBENCH_BRIDGE "Build the devbench integration (inspect kind=loadprofiler)" ON)
+
 add_subdirectory("${_COMMONLIB_FOLDER}" ${CMAKE_CURRENT_BINARY_DIR}/_deps/clib-build)
 get_target_property(COMMONLIB_SRC_DIR CommonLibSSE SOURCE_DIR)
 
@@ -109,6 +114,12 @@ endif()
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE IS_HOST_PLUGIN)
 target_link_libraries(${PROJECT_NAME} PRIVATE SkyrimVRESL::CommonLib)
+
+if(DEVBENCH_BRIDGE)
+  target_sources(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/extern/devbench-api/DevBenchAPI.cpp)
+  target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/extern/devbench-api)
+  target_compile_definitions(${PROJECT_NAME} PRIVATE DEVBENCH_BRIDGE_ENABLED)
+endif()
 
 set(wildlander_output false)
 set(steam_owrt_output false)

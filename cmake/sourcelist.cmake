@@ -7,6 +7,7 @@ set(sources ${sources}
 	src/ChangeFormProfiling.cpp
 	src/ESPProfiling.cpp
 	src/LoadProfiling.cpp
+	src/DevBenchBridge.cpp
 	src/MCP.cpp
 	src/Events.cpp
 	src/Localization.cpp

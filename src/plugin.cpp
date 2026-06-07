@@ -1,4 +1,5 @@
-﻿#include "Hooks.h"
+﻿#include "DevBenchBridge.h"
+#include "Hooks.h"
 #include "Logger.h"
 #include "MCP.h"
 #include "Localization.h"
@@ -17,6 +18,8 @@ namespace {
                 // so VRESL has definitely registered its listener by now.
                 // Dispatching at kPostLoad is too early if LTP loads before VRESL.
                 VRESLIntegration::ConnectIfPresent();
+                // devbench's server is up after kPostLoad; register the loadprofiler inspect kind.
+                DevBenchBridge::Install();
                 break;
             case SKSE::MessagingInterface::kDataLoaded:
                 logger::info("Received kDataLoaded message, installing events");
